@@ -49,7 +49,7 @@ public static class UpdateService
     // Nur in Debug-Builds: lokaler Testserver statt GitHub (Release-Builds fragen ausschließlich GitHub).
     private static string LatestReleaseApi =>
 #if DEBUG
-        Environment.GetEnvironmentVariable("CUSTOMTOPBAR_UPDATE_API") ??
+        Environment.GetEnvironmentVariable("VEYRA_UPDATE_API") ??
 #endif
         GitHubLatestReleaseApi;
 

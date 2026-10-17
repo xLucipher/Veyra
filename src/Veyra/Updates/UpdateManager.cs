@@ -15,7 +15,7 @@ public sealed class UpdateManager : IDisposable
 {
     private static readonly TimeSpan StartupDelay =
 #if DEBUG
-        int.TryParse(Environment.GetEnvironmentVariable("CUSTOMTOPBAR_UPDATE_DELAY_S"), out var s) ? TimeSpan.FromSeconds(s) :
+        int.TryParse(Environment.GetEnvironmentVariable("VEYRA_UPDATE_DELAY_S"), out var s) ? TimeSpan.FromSeconds(s) :
 #endif
         TimeSpan.FromSeconds(20);
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(6);

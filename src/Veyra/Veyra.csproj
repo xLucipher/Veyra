@@ -14,7 +14,13 @@
     <RootNamespace>Veyra</RootNamespace>
     <Version>1.1.0</Version>
     <Product>Veyra</Product>
+    <!-- Dateieigenschaften der EXE (Explorer → Eigenschaften → Details, Task-Manager) -->
+    <AssemblyTitle>Veyra</AssemblyTitle>
+    <Company>xLucipher</Company>
+    <Authors>xLucipher</Authors>
+    <Copyright>© 2026 xLucipher</Copyright>
     <Description>Ressourcenschonende, konfigurierbare Zusatz-Taskleiste für Windows 11</Description>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
     <!-- Kleiner Speicher-Footprint: Workstation-GC ohne Hintergrund-GC-Thread -->
     <ServerGarbageCollection>false</ServerGarbageCollection>
