@@ -169,7 +169,7 @@ Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwe
 
 **Einstellungsfenster:** dunkles Fluent-Design (WPF-`ThemeMode="Dark"`, in .NET enthalten – keine Zusatzpakete). Formate, Sprache, Schriftart/-gewicht, Verzögerungen und Monitor werden per Dropdown mit Live-Vorschau gewählt; Farben über eine Palette mit Farbfeldern oder als eigener Hex-Wert; Größen per Auswahl oder eigenem Wert; Vollbild-Ausnahmen aus der Liste laufender Programme.
 
-**Ältere Dateien** (eine Leiste mit `Appearance`, `Widgets` und `System.MonitorSelection` auf oberster Ebene) werden beim Laden automatisch in `Bars[0]` übernommen und im neuen Format gespeichert.
+**Ältere Dateien** (eine Leiste mit `Appearance`, `Widgets` und `System.MonitorSelection` auf oberster Ebene) werden beim Laden automatisch in `Bars[0]` übernommen; ein gemeinsames `Clock` auf oberster Ebene wird in jede Uhr kopiert. Beides wird im neuen Format gespeichert.
 
 **Fehlerhafte Datei:** Beim Start wird sie als `settings.json.invalid-<Zeitstempel>` gesichert und durch Standardwerte ersetzt; im laufenden Betrieb bleiben die bisherigen Einstellungen aktiv (Warnung im Log). Ungültige Einzelwerte (Farben, Formate, Bereiche) werden auf Standard bzw. Grenzwerte korrigiert.
 
@@ -177,7 +177,7 @@ Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwe
 |---|---|---|---|
 | Bars[] | `Id`, `Name` | *(automatisch)*, `Leiste N` | eine Leiste = ein eigenes Fenster; es gibt immer mindestens eine |
 | | `MonitorSelection` | `Primary` | oder Gerätename, z. B. `\\.\DISPLAY2` (siehe Einstellungen → Monitore) |
-| | `Widgets` | Uhr + Audio | Widgets dieser Leiste (Typ, Bereich, Positionen, Geräte) |
+| | `Widgets` | Uhr + Audio | Widgets dieser Leiste (Typ, Bereich, Positionen, Geräte); Uhren mit eigenem `Clock`, Audio-Widgets mit `IconColor`/`LabelColor` (leer = `ForegroundColor` der Leiste) |
 | Bars[].Appearance | `Mode` | `FullWidth` | `FullWidth` = fixiert (oben, volle Breite) · `Floating` = dynamisch (frei beweglich) |
 | | `Height` | `48` | Höhe in geräteunabhängigen Pixeln (×1,5 bei 150 % Skalierung) |
 | | `BackgroundColor` | `#202127` | `#RGB`, `#RRGGBB`, `#AARRGGBB` |
@@ -198,7 +198,7 @@ Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwe
 | | `FullscreenSafetyCheckIntervalMs` | `2000` | Sicherheitsprüfung, `0` = aus |
 | | `FullscreenExcludedProcesses` | `[]` | z. B. `["vlc"]` – nie Vollbild |
 | | `FullscreenForcedProcesses` | `[]` | z. B. `["MeinSpiel"]` – Vollbild, sobald Arbeitsbereich gefüllt |
-| Clock | `TimeFormat` | `HH:mm:ss` | allein maßgeblich: `HH:mm` = ohne Sekunden, `HH:mm:ss` = mit; 12 h: `h:mm tt` (fehlen der Sprache AM/PM-Bezeichner, wird „AM“/„PM“ verwendet) |
+| Bars[].Widgets[].Clock | `TimeFormat` | `HH:mm:ss` | allein maßgeblich: `HH:mm` = ohne Sekunden, `HH:mm:ss` = mit; 12 h: `h:mm tt` (fehlen der Sprache AM/PM-Bezeichner, wird „AM“/„PM“ verwendet) |
 | | `ShowSeconds` | *(abgeleitet)* | wird beim Speichern aus `TimeFormat` gesetzt, nur informativ |
 | | `ShowDate` / `DateFormat` | `false` / `dddd, d. MMMM yyyy` | |
 | | `ShowWeekNumber` / `WeekNumberFormat` | `false` / `KW {0}` | ISO-8601-Kalenderwoche |

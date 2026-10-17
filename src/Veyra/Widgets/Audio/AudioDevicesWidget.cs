@@ -30,6 +30,7 @@ public sealed class AudioDevicesWidget : ObservableObject, IBarWidget
     private AudioSettings _audio = new();
     private bool _running;
     private Brush _foreground = Brushes.White;
+    private Brush _iconForeground = Brushes.White;
     private FontFamily _fontFamily = new("Segoe UI");
 
     private readonly string _entryId;
@@ -48,7 +49,11 @@ public sealed class AudioDevicesWidget : ObservableObject, IBarWidget
 
     public FontFamily IconFontFamily { get; } = new(AudioIcons.FontFamily);
 
+    /// <summary>Farbe der Gerätenamen.</summary>
     public Brush Foreground { get => _foreground; private set => SetProperty(ref _foreground, value); }
+
+    /// <summary>Farbe der Symbole.</summary>
+    public Brush IconForeground { get => _iconForeground; private set => SetProperty(ref _iconForeground, value); }
 
     public FontFamily FontFamily { get => _fontFamily; private set => SetProperty(ref _fontFamily, value); }
 
@@ -58,7 +63,10 @@ public sealed class AudioDevicesWidget : ObservableObject, IBarWidget
         // Geräteauswahl dieser Widget-Instanz; leer = alle aktiven Geräte (neue erscheinen automatisch).
         var entry = bar.Widgets.FirstOrDefault(w => w.Id == _entryId);
         _selectedDevices = new HashSet<string>(entry?.Devices ?? [], StringComparer.OrdinalIgnoreCase);
-        Foreground = ColorUtil.ToBrush(bar.Appearance.ForegroundColor, Colors.White);
+        // Eigene Farben dieser Widget-Instanz; ohne eigene Farbe gilt die Schriftfarbe der Leiste.
+        var barForeground = ColorUtil.ToBrush(bar.Appearance.ForegroundColor, Colors.White);
+        Foreground = entry?.LabelColor is { } labelColor ? ColorUtil.ToBrush(labelColor, Colors.White) : barForeground;
+        IconForeground = entry?.IconColor is { } iconColor ? ColorUtil.ToBrush(iconColor, Colors.White) : barForeground;
         FontFamily = new FontFamily(bar.Appearance.FontFamily);
         if (_running) Rebuild();
     }

@@ -160,7 +160,7 @@ public sealed class BarController : IDisposable
         {
             IBarWidget? widget = entry.Type switch
             {
-                WidgetType.Clock => new ClockWidget(),
+                WidgetType.Clock => new ClockWidget(entry.Id),
                 WidgetType.AudioOutputs => new AudioDevicesWidget(entry.Id, AudioFlow.Output, _audioService()),
                 WidgetType.AudioInputs => new AudioDevicesWidget(entry.Id, AudioFlow.Input, _audioService()),
                 _ => null,

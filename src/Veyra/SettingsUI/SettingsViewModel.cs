@@ -299,6 +299,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         // Feste Widgets zuerst, freie danach von links nach rechts – so wie sie auf der Leiste stehen.
         foreach (var entry in Bar.Widgets.OrderBy(w => w.IsFixed ? 0 : 1).ThenBy(w => w.IsFixed ? (double)w.Slot : w.Position))
             WidgetRows.Add(CreateRow(entry));
+        RebuildClockRows();
     }
 
     private WidgetRowViewModel CreateRow(WidgetEntry entry)
@@ -309,7 +310,82 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             WidgetType.AudioInputs => _audioService.GetDevices(AudioFlow.Input),
             _ => [],
         };
-        return new WidgetRowViewModel(entry, devices, _settings.Audio, row => WidgetRows.Remove(row));
+        return new WidgetRowViewModel(entry, devices, _settings.Audio, Bar.Appearance.ForegroundColor,
+            remove: row =>
+            {
+                WidgetRows.Remove(row);
+                RebuildClockRows();
+            },
+            editClock: row =>
+            {
+                SelectedClock = row;
+                SelectedPageIndex = ClockPageIndex;
+            });
+    }
+
+    // ---- Uhren (jede Uhr hat eigene Einstellungen) ------------------------------------------
+    private const int ClockPageIndex = 2;
+    private int _selectedPageIndex;
+    private WidgetRowViewModel? _selectedClock;
+
+    /// <summary>Platzhalter, solange die Leiste keine Uhr hat – Änderungen daran werden nirgends gespeichert.</summary>
+    private readonly ClockSettings _noClock = new();
+
+    public int SelectedPageIndex { get => _selectedPageIndex; set => SetProperty(ref _selectedPageIndex, value); }
+
+    /// <summary>Uhren der ausgewählten Leiste.</summary>
+    public System.Collections.ObjectModel.ObservableCollection<WidgetRowViewModel> ClockRows { get; } = [];
+
+    public WidgetRowViewModel? SelectedClock
+    {
+        get => _selectedClock;
+        set
+        {
+            // WPF schreibt beim Austausch der Liste kurz null zurück – ignorieren.
+            if (value is null || value == _selectedClock) return;
+            _selectedClock = value;
+            OnClockSwitched();
+        }
+    }
+
+    /// <summary>Die Uhr, deren Einstellungen auf der Seite "Uhr &amp; Kalender" bearbeitet werden.</summary>
+    public ClockSettings ClockEdit => _selectedClock?.Clock ?? _noClock;
+
+    public System.Windows.Visibility ClockEditorVisibility =>
+        ClockRows.Count > 0 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+    public System.Windows.Visibility NoClockVisibility =>
+        ClockRows.Count > 0 ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+
+    public System.Windows.Visibility ClockSelectorVisibility =>
+        ClockRows.Count > 1 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+    /// <summary>Uhrenliste neu aufbauen (Widgets hinzugefügt/entfernt, andere Leiste) – Auswahl möglichst beibehalten.</summary>
+    private void RebuildClockRows()
+    {
+        var clocks = WidgetRows.Where(r => r.IsClock).ToList();
+        for (int i = 0; i < clocks.Count; i++)
+            clocks[i].Title = clocks.Count > 1 ? $"Uhr {i + 1}" : "Uhr";
+
+        var previous = _selectedClock;
+        ClockRows.Clear();
+        foreach (var clock in clocks) ClockRows.Add(clock);
+
+        // Nach "Übernehmen" sind die Zeilen neu erzeugt – deshalb über die Widget-ID wiederfinden.
+        _selectedClock = clocks.FirstOrDefault(c => c.Id == previous?.Id) ?? clocks.FirstOrDefault();
+        OnClockSwitched();
+        OnPropertyChanged(nameof(ClockEditorVisibility));
+        OnPropertyChanged(nameof(NoClockVisibility));
+        OnPropertyChanged(nameof(ClockSelectorVisibility));
+    }
+
+    private void OnClockSwitched()
+    {
+        OnPropertyChanged(nameof(SelectedClock));
+        OnPropertyChanged(nameof(ClockEdit));
+        OnPropertyChanged(nameof(FontWeight));
+        OnPropertyChanged(nameof(ClockFontFamily));
+        RebuildOptions(); // Formatlisten mit Sprache und Werten dieser Uhr
     }
 
     /// <summary>Wirkt sofort auf der Leiste: Positionen werden direkt in der laufenden Konfiguration gelöscht.</summary>
@@ -342,6 +418,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             entry.Slot = new[] { WidgetSlot.Center, WidgetSlot.Right, WidgetSlot.Left }.FirstOrDefault(s => !used.Contains(s), WidgetSlot.Right);
         }
         WidgetRows.Add(CreateRow(entry));
+        RebuildClockRows();
         NewWidget = null;
         StatusText = "Widget hinzugefügt – mit „Übernehmen“ auf die Leiste bringen.";
     }
@@ -476,35 +553,35 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     // ---- Ausgewählte Werte ----------------------------------------------------------------
     public string TimeFormat
     {
-        get => _settings.Clock.TimeFormat;
+        get => ClockEdit.TimeFormat;
         set
         {
             if (string.IsNullOrEmpty(value)) return;
-            _settings.Clock.TimeFormat = value;
-            _settings.Clock.ShowSeconds = ClockSettings.HasSeconds(value);
+            ClockEdit.TimeFormat = value;
+            ClockEdit.ShowSeconds = ClockSettings.HasSeconds(value);
             OnPropertyChanged();
         }
     }
 
     public string DateFormat
     {
-        get => _settings.Clock.DateFormat;
-        set => SetIfNotEmpty(value, v => _settings.Clock.DateFormat = v);
+        get => ClockEdit.DateFormat;
+        set => SetIfNotEmpty(value, v => ClockEdit.DateFormat = v);
     }
 
     public string WeekNumberFormat
     {
-        get => _settings.Clock.WeekNumberFormat;
-        set => SetIfNotEmpty(value, v => _settings.Clock.WeekNumberFormat = v);
+        get => ClockEdit.WeekNumberFormat;
+        set => SetIfNotEmpty(value, v => ClockEdit.WeekNumberFormat = v);
     }
 
     public string Culture
     {
-        get => _settings.Clock.Culture;
+        get => ClockEdit.Culture;
         set
         {
-            if (value is null || value == _settings.Clock.Culture) return;
-            _settings.Clock.Culture = value;
+            if (value is null || value == ClockEdit.Culture) return;
+            ClockEdit.Culture = value;
             OnPropertyChanged();
             RebuildOptions(); // Vorschauen in der neuen Sprache
         }
@@ -512,8 +589,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     public string FontWeight
     {
-        get => _settings.Clock.FontWeight;
-        set => SetIfNotEmpty(value, v => _settings.Clock.FontWeight = v);
+        get => ClockEdit.FontWeight;
+        set => SetIfNotEmpty(value, v => ClockEdit.FontWeight = v);
     }
 
     public string AppearanceFontFamily
@@ -524,8 +601,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     public string ClockFontFamily
     {
-        get => string.IsNullOrEmpty(_settings.Clock.FontFamily) ? DefaultFontLabel : _settings.Clock.FontFamily;
-        set => SetIfNotEmpty(value, v => _settings.Clock.FontFamily = v == DefaultFontLabel ? "" : v);
+        get => string.IsNullOrEmpty(ClockEdit.FontFamily) ? DefaultFontLabel : ClockEdit.FontFamily;
+        set => SetIfNotEmpty(value, v => ClockEdit.FontFamily = v == DefaultFontLabel ? "" : v);
     }
 
     public string MonitorSelection
@@ -576,12 +653,12 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     private void RebuildOptions()
     {
-        var culture = ClockSettings.ResolveCulture(_settings.Clock.Culture);
+        var culture = ClockSettings.ResolveCulture(ClockEdit.Culture);
 
-        TimeFormatOptions = SettingsOptions.BuildTimeFormats(culture, _settings.Clock.TimeFormat);
-        DateFormatOptions = SettingsOptions.BuildDateFormats(culture, _settings.Clock.DateFormat);
-        WeekFormatOptions = SettingsOptions.BuildWeekFormats(culture, _settings.Clock.WeekNumberFormat);
-        CultureOptions = SettingsOptions.BuildCultures(_settings.Clock.Culture);
+        TimeFormatOptions = SettingsOptions.BuildTimeFormats(culture, ClockEdit.TimeFormat);
+        DateFormatOptions = SettingsOptions.BuildDateFormats(culture, ClockEdit.DateFormat);
+        WeekFormatOptions = SettingsOptions.BuildWeekFormats(culture, ClockEdit.WeekNumberFormat);
+        CultureOptions = SettingsOptions.BuildCultures(ClockEdit.Culture);
         ShowDelayOptions = SettingsOptions.BuildDelays(_settings.Behavior.FullscreenShowDelayMs);
         SafetyIntervalOptions = SettingsOptions.BuildSafetyIntervals(_settings.Behavior.FullscreenSafetyCheckIntervalMs);
         BorderThicknessOptions = SettingsOptions.BuildBorderThickness(Bar.Appearance.BorderThickness);

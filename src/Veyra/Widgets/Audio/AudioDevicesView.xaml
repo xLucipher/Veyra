@@ -49,7 +49,7 @@
                 <Button Style="{StaticResource BarButton}" Command="{Binding Command}" ToolTip="{Binding ToolTip}">
                     <StackPanel Orientation="Horizontal">
                         <local:AudioIconView IconKey="{Binding IconKey}" Size="17" Visibility="{Binding IconVisibility}"
-                                             Foreground="{Binding DataContext.Foreground, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                             Foreground="{Binding DataContext.IconForeground, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                              VerticalAlignment="Center" />
                         <TextBlock Text="{Binding Label}" Visibility="{Binding LabelVisibility}"
                                    FontFamily="{Binding DataContext.FontFamily, RelativeSource={RelativeSource AncestorType=ItemsControl}}"

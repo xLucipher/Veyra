@@ -29,13 +29,12 @@ public enum WindowLayer
 /// <summary>Wurzelobjekt von %AppData%\Veyra\settings.json.</summary>
 public sealed class AppSettings
 {
-    public int Version { get; set; } = 3;
+    public int Version { get; set; } = 4;
 
     /// <summary>Alle Leisten. Es gibt immer mindestens eine.</summary>
     public List<BarSettings> Bars { get; set; } = [];
 
     public BehaviorSettings Behavior { get; set; } = new();
-    public ClockSettings Clock { get; set; } = new();
     public SystemSettings System { get; set; } = new();
 
     public AudioSettings Audio { get; set; } = new();
@@ -50,6 +49,10 @@ public sealed class AppSettings
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<WidgetEntry>? Widgets { get; set; }
 
+    /// <summary>Nur zum Einlesen älterer Dateien mit einer gemeinsamen Uhr-Einstellung: jede Uhr erhält davon eine eigene Kopie.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ClockSettings? Clock { get; set; }
+
     public AppSettings Clone() => SettingsService.Deserialize(SettingsService.Serialize(this)) ?? new AppSettings();
 
     public BarSettings? FindBar(string? id) => Bars.FirstOrDefault(b => b.Id == id);
@@ -58,7 +61,6 @@ public sealed class AppSettings
     public void Normalize()
     {
         Behavior ??= new BehaviorSettings();
-        Clock ??= new ClockSettings();
         System ??= new SystemSettings();
         Audio ??= new AudioSettings();
         Updates ??= new UpdateSettings();
@@ -77,9 +79,12 @@ public sealed class AppSettings
         Appearance = null;
         Widgets = null;
         System.MonitorSelection = null;
-        Version = 3;
+        Version = 4;
 
-        for (int i = 0; i < Bars.Count; i++) Bars[i].Normalize(i);
+        var legacyClock = Clock;
+        Clock = null;
+
+        for (int i = 0; i < Bars.Count; i++) Bars[i].Normalize(i, legacyClock);
         // Doppelte IDs (z. B. kopierte Einträge) würden Leisten bzw. Drag & Drop verwechseln – über alle Leisten hinweg.
         foreach (var duplicate in Bars.GroupBy(b => b.Id).SelectMany(g => g.Skip(1)))
             duplicate.Id = WidgetEntry.NewId();
@@ -87,7 +92,6 @@ public sealed class AppSettings
             duplicate.Id = WidgetEntry.NewId();
 
         Behavior.Normalize();
-        Clock.Normalize();
         System.Normalize();
         Audio.Normalize();
         Updates.SkippedVersion = Updates.SkippedVersion?.Trim() ?? "";
@@ -112,7 +116,8 @@ public sealed class BarSettings
     /// <summary>Widgets auf dieser Leiste. Reihenfolge in der Liste = Reihenfolge innerhalb eines Bereichs.</summary>
     public List<WidgetEntry> Widgets { get; set; } = WidgetEntry.Defaults();
 
-    internal void Normalize(int index)
+    /// <param name="clockTemplate">Ausgangswerte für Uhren ohne eigene Einstellungen (ältere Dateien); null = Standardwerte.</param>
+    internal void Normalize(int index, ClockSettings? clockTemplate = null)
     {
         if (string.IsNullOrWhiteSpace(Id)) Id = WidgetEntry.NewId();
         Name = string.IsNullOrWhiteSpace(Name) ? $"Leiste {index + 1}" : Name.Trim();
@@ -120,7 +125,7 @@ public sealed class BarSettings
         Appearance ??= new AppearanceSettings();
         Appearance.Normalize();
         Widgets = Widgets?.Where(w => w is not null && Enum.IsDefined(w.Type)).ToList() ?? WidgetEntry.Defaults();
-        foreach (var widget in Widgets) widget.Normalize();
+        foreach (var widget in Widgets) widget.Normalize(clockTemplate);
     }
 }
 
@@ -197,6 +202,18 @@ public sealed class WidgetEntry
     /// <summary>Nur Audio-Widgets: angezeigte Geräte (Endpunkt-IDs). Leer = alle aktiven Geräte.</summary>
     public List<string> Devices { get; set; } = [];
 
+    /// <summary>Nur Audio-Widgets: Farbe der Symbole. null = Schriftfarbe der Leiste.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? IconColor { get; set; }
+
+    /// <summary>Nur Audio-Widgets: Farbe der Gerätenamen. null = Schriftfarbe der Leiste.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LabelColor { get; set; }
+
+    /// <summary>Nur Uhren: Format, Schrift und Farben – jede Uhr hat eigene Werte.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ClockSettings? Clock { get; set; }
+
     public const double MinScale = 0.25;
     public const double MaxScale = 8;
 
@@ -214,9 +231,20 @@ public sealed class WidgetEntry
         new() { Type = WidgetType.AudioInputs, Position = 0.93 },
     ];
 
-    internal void Normalize()
+    internal void Normalize(ClockSettings? clockTemplate = null)
     {
         if (string.IsNullOrWhiteSpace(Id)) Id = NewId();
+        if (Type == WidgetType.Clock)
+        {
+            Clock ??= clockTemplate?.Clone() ?? new ClockSettings();
+            Clock.Normalize();
+        }
+        else
+        {
+            Clock = null;
+        }
+        IconColor = ColorUtil.IsValid(IconColor) ? IconColor!.Trim() : null;
+        LabelColor = ColorUtil.IsValid(LabelColor) ? LabelColor!.Trim() : null;
         if (!Enum.IsDefined(Slot)) Slot = WidgetSlot.Center;
         OuterMargin = double.IsFinite(OuterMargin) ? Math.Clamp(OuterMargin, 0, 500) : 12;
         InnerSpacing = double.IsFinite(InnerSpacing) ? Math.Clamp(InnerSpacing, 0, 200) : 16;
@@ -443,6 +471,8 @@ public sealed class ClockSettings
 
     /// <summary>Kultur für Wochentags-/Monatsnamen, z. B. "de-DE". Leer = Systemeinstellung.</summary>
     public string Culture { get; set; } = "";
+
+    public ClockSettings Clone() => (ClockSettings)MemberwiseClone();
 
     /// <summary>
     /// Kultur für die Uhr. Kulturen ohne AM/PM-Bezeichner (z. B. de-DE unter Windows) erhalten "AM"/"PM",

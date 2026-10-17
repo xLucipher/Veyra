@@ -142,7 +142,7 @@
                     <Image Source="/Assets/logo.png" Width="34" Height="34" RenderOptions.BitmapScalingMode="HighQuality" />
                     <TextBlock Text="Veyra" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" Margin="12,0,0,0" />
                 </StackPanel>
-                <ListBox x:Name="Nav" SelectedIndex="0" Background="Transparent" BorderThickness="0">
+                <ListBox x:Name="Nav" SelectedIndex="{Binding SelectedPageIndex}" Background="Transparent" BorderThickness="0">
                     <ListBoxItem><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE713;" Style="{StaticResource Glyph}" Width="30" /><TextBlock Text="Allgemein" VerticalAlignment="Center" /></StackPanel></ListBoxItem>
                     <ListBoxItem><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE790;" Style="{StaticResource Glyph}" Width="30" /><TextBlock Text="Darstellung" VerticalAlignment="Center" /></StackPanel></ListBoxItem>
                     <ListBoxItem><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE823;" Style="{StaticResource Glyph}" Width="30" /><TextBlock Text="Uhr &amp; Kalender" VerticalAlignment="Center" /></StackPanel></ListBoxItem>
@@ -384,7 +384,7 @@
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <TextBlock Text="Schrift" Style="{StaticResource CardTitle}" />
-                            <TextBlock Text="Standard für alle Widgets; die Uhr kann eigene Werte haben." Style="{StaticResource RowHint}" />
+                            <TextBlock Text="Standard für alle Widgets. Uhren und Audio-Widgets können eigene Farben haben." Style="{StaticResource RowHint}" />
                             <DockPanel Style="{StaticResource Row}">
                                 <ComboBox DockPanel.Dock="Right" ItemsSource="{Binding FontFamilies}" SelectedItem="{Binding AppearanceFontFamily}"
                                           ItemTemplate="{StaticResource FontItem}" ItemsPanel="{StaticResource VirtualPanel}"
@@ -406,6 +406,30 @@
             <ScrollViewer Style="{StaticResource Page}" Visibility="{Binding SelectedIndex, ElementName=Nav, Converter={StaticResource PageVisibility}, ConverterParameter=2}">
                 <StackPanel>
                     <TextBlock Text="Uhr &amp; Kalender" Style="{StaticResource PageTitle}" />
+                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource BarSelector}" Focusable="False" />
+
+                    <!-- Leiste ohne Uhr -->
+                    <Border Style="{StaticResource Card}" Visibility="{Binding NoClockVisibility}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Left" Text="&#xE946;" Style="{StaticResource Glyph}" FontSize="20" Margin="0,0,14,0" />
+                            <TextBlock Style="{StaticResource RowHint}" Margin="0" VerticalAlignment="Center" TextWrapping="Wrap"
+                                       Text="Diese Leiste hat keine Uhr. Unter „Widgets“ kannst du eine hinzufügen." />
+                        </DockPanel>
+                    </Border>
+
+                    <StackPanel Visibility="{Binding ClockEditorVisibility}">
+                    <!-- Mehrere Uhren: jede hat eigene Einstellungen -->
+                    <Border Style="{StaticResource Card}" Visibility="{Binding ClockSelectorVisibility}">
+                        <DockPanel Style="{StaticResource Row}">
+                            <ComboBox DockPanel.Dock="Right" ItemsSource="{Binding ClockRows}" DisplayMemberPath="Title"
+                                      SelectedItem="{Binding SelectedClock}" Width="200" VerticalAlignment="Center" />
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Uhr bearbeiten" Style="{StaticResource RowTitle}" />
+                                <TextBlock Text="Jede Uhr hat eigene Einstellungen – die Nummer entspricht der Reihenfolge unter „Widgets“." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <TextBlock Text="Uhrzeit" Style="{StaticResource CardTitle}" />
@@ -420,7 +444,7 @@
                             <Border Style="{StaticResource Divider}" />
                             <DockPanel Style="{StaticResource Row}">
                                 <ComboBox DockPanel.Dock="Right" IsEditable="True" ItemsSource="{Binding FontSizePresets}" Width="120" VerticalAlignment="Center"
-                                          Text="{Binding Settings.Clock.FontSize, UpdateSourceTrigger=PropertyChanged}" />
+                                          Text="{Binding ClockEdit.FontSize, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Schriftgröße (px)" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
@@ -438,7 +462,7 @@
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
                             <DockPanel Style="{StaticResource Row}">
-                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding Settings.Clock.FontColor, UpdateSourceTrigger=PropertyChanged}" />
+                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding ClockEdit.FontColor, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Schriftfarbe" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
                             </DockPanel>
                         </StackPanel>
@@ -448,7 +472,7 @@
                         <StackPanel>
                             <TextBlock Text="Datum und Kalenderwoche" Style="{StaticResource CardTitle}" />
                             <DockPanel Style="{StaticResource Row}">
-                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Settings.Clock.ShowDate}" VerticalAlignment="Center" />
+                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding ClockEdit.ShowDate}" VerticalAlignment="Center" />
                                 <TextBlock Text="Datum unter der Uhrzeit anzeigen" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
@@ -459,7 +483,7 @@
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
                             <DockPanel Style="{StaticResource Row}">
-                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Settings.Clock.ShowWeekNumber}" VerticalAlignment="Center" />
+                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding ClockEdit.ShowWeekNumber}" VerticalAlignment="Center" />
                                 <TextBlock Text="Kalenderwoche anzeigen (ISO 8601)" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
@@ -471,12 +495,12 @@
                             <Border Style="{StaticResource Divider}" />
                             <DockPanel Style="{StaticResource Row}">
                                 <ComboBox DockPanel.Dock="Right" IsEditable="True" ItemsSource="{Binding DateFontSizePresets}" Width="120" VerticalAlignment="Center"
-                                          Text="{Binding Settings.Clock.DateFontSize, UpdateSourceTrigger=PropertyChanged}" />
+                                          Text="{Binding ClockEdit.DateFontSize, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Schriftgröße Datum (px)" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
                             <DockPanel Style="{StaticResource Row}">
-                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding Settings.Clock.DateFontColor, UpdateSourceTrigger=PropertyChanged}" />
+                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding ClockEdit.DateFontColor, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Schriftfarbe Datum" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
@@ -490,6 +514,7 @@
                             </DockPanel>
                         </StackPanel>
                     </Border>
+                    </StackPanel>
 
                     <Border Style="{StaticResource Card}">
                         <DockPanel>
@@ -550,7 +575,7 @@
                                                 </Button>
                                             </StackPanel>
                                             <StackPanel VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Info.Name}" Style="{StaticResource RowTitle}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding Title}" Style="{StaticResource RowTitle}" FontWeight="SemiBold" />
                                                 <TextBlock Text="{Binding Info.Description}" Style="{StaticResource RowHint}" />
                                             </StackPanel>
                                         </DockPanel>
@@ -598,11 +623,47 @@
                                             </DockPanel>
                                         </StackPanel>
 
+                                        <!-- Uhren: Format, Schrift und Farben dieser Uhr -->
+                                        <StackPanel Visibility="{Binding ClockVisibility}" Margin="40,6,0,0">
+                                            <Border Style="{StaticResource Divider}" />
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <Button DockPanel.Dock="Right" Command="{Binding EditClockCommand}" VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="&#xE70F;" Style="{StaticResource Glyph}" FontSize="12" Margin="0,0,8,0" />
+                                                        <TextBlock Text="Uhr anpassen" />
+                                                    </StackPanel>
+                                                </Button>
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Format, Schrift und Farben" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Gelten nur für diese Uhr – weitere Uhren lassen sich unabhängig gestalten." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </StackPanel>
+
                                         <!-- Freie Widgets: Position per Drag & Drop -->
                                         <TextBlock Visibility="{Binding FreeVisibility}" Text="{Binding PositionText}" Style="{StaticResource RowHint}" Margin="40,4,0,0" />
 
                                         <!-- Audio-Widgets: Geräteauswahl je Instanz -->
                                         <StackPanel Visibility="{Binding AudioVisibility}" Margin="40,6,0,0">
+                                            <Border Style="{StaticResource Divider}" />
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding IconColor, UpdateSourceTrigger=PropertyChanged}" />
+                                                <TextBlock Text="Symbolfarbe" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding LabelColor, UpdateSourceTrigger=PropertyChanged}" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Schriftfarbe" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Für die Gerätenamen (Audiogeräte → Beschriftung)." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <Button DockPanel.Dock="Right" Content="Zurücksetzen" Command="{Binding ResetColorsCommand}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Farben der Leiste verwenden" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Ohne eigene Farbe folgt das Widget der Schriftfarbe unter „Darstellung“." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
                                             <Border Style="{StaticResource Divider}" />
                                             <DockPanel Style="{StaticResource Row}">
                                                 <CheckBox DockPanel.Dock="Right" IsChecked="{Binding AllDevices}" VerticalAlignment="Center" />

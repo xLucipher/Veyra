@@ -17,6 +17,7 @@ public sealed class ClockWidget : ObservableObject, IBarWidget
     private static readonly Color DefaultForeground = Colors.White;
 
     private readonly DispatcherTimer _timer;
+    private readonly string _entryId;
     private ClockView? _view;
     private bool _running;
 
@@ -38,8 +39,9 @@ public sealed class ClockWidget : ObservableObject, IBarWidget
     private double _dateFontSize = 11;
     private Brush _dateForeground = Brushes.LightGray;
 
-    public ClockWidget()
+    public ClockWidget(string entryId)
     {
+        _entryId = entryId;
         _timer = new DispatcherTimer(DispatcherPriority.Normal);
         _timer.Tick += OnTick;
     }
@@ -61,7 +63,8 @@ public sealed class ClockWidget : ObservableObject, IBarWidget
 
     public void ApplySettings(AppSettings settings, BarSettings bar)
     {
-        var clock = settings.Clock;
+        // Jede Uhr hat eigene Einstellungen in ihrem Widget-Eintrag.
+        var clock = bar.Widgets.FirstOrDefault(w => w.Id == _entryId)?.Clock ?? new ClockSettings();
 
         _timeFormat = clock.TimeFormat;
         _dateFormat = clock.DateFormat;

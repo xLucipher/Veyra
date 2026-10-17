@@ -61,18 +61,43 @@ public sealed class WidgetRowViewModel : ObservableObject
     private double _innerSpacing;
     private double _scalePercent;
     private bool _allDevices;
+    private string _title;
+    private readonly string _barForeground;
+    private string _iconColor;
+    private string _labelColor;
+    private bool _iconColorCustom;
+    private bool _labelColorCustom;
 
-    public WidgetRowViewModel(WidgetEntry entry, IReadOnlyList<AudioDevice> devices, AudioSettings audio, Action<WidgetRowViewModel> remove)
+    /// <param name="barForeground">Schriftfarbe der Leiste – gilt, solange das Widget keine eigene Farbe hat.</param>
+    /// <param name="editClock">Öffnet die Seite "Uhr &amp; Kalender" mit dieser Uhr.</param>
+    public WidgetRowViewModel(WidgetEntry entry, IReadOnlyList<AudioDevice> devices, AudioSettings audio, string barForeground,
+        Action<WidgetRowViewModel> remove, Action<WidgetRowViewModel> editClock)
     {
         _entry = entry;
         Info = WidgetCatalog.Get(entry.Type);
+        _title = Info.Name;
         _slot = entry.Slot;
         _enabled = entry.Enabled;
         _outerMargin = entry.OuterMargin;
         _innerSpacing = entry.InnerSpacing;
         _scalePercent = Math.Round(entry.Scale * 100);
         _allDevices = entry.Devices.Count == 0;
+        _barForeground = barForeground;
+        _iconColorCustom = entry.IconColor is not null;
+        _labelColorCustom = entry.LabelColor is not null;
+        _iconColor = entry.IconColor ?? barForeground;
+        _labelColor = entry.LabelColor ?? barForeground;
+        // Eigene Kopie: Änderungen auf der Seite "Uhr & Kalender" wirken erst beim Übernehmen.
+        Clock = entry.Clock?.Clone() ?? new ClockSettings();
         RemoveCommand = new RelayCommand(() => remove(this));
+        EditClockCommand = new RelayCommand(() => editClock(this));
+        ResetColorsCommand = new RelayCommand(() =>
+        {
+            IconColor = _barForeground;
+            LabelColor = _barForeground;
+            _iconColorCustom = false;
+            _labelColorCustom = false;
+        });
 
         if (IsAudio)
         {
@@ -96,12 +121,44 @@ public sealed class WidgetRowViewModel : ObservableObject
     public string Id => _entry.Id;
     public WidgetInfo Info { get; }
     public ICommand RemoveCommand { get; }
+    public ICommand EditClockCommand { get; }
+    public ICommand ResetColorsCommand { get; }
+
+    /// <summary>Anzeigename; bei mehreren Uhren auf einer Leiste nummeriert ("Uhr 2").</summary>
+    public string Title { get => _title; set => SetProperty(ref _title, value); }
+
+    public override string ToString() => Title; // Name für Auswahllisten und Bildschirmleser
 
     public bool IsFixed => _entry.IsFixed;
+    public bool IsClock => _entry.Type == WidgetType.Clock;
     public bool IsAudio => _entry.Type is WidgetType.AudioOutputs or WidgetType.AudioInputs;
     public Visibility FixedVisibility => IsFixed ? Visibility.Visible : Visibility.Collapsed;
     public Visibility FreeVisibility => IsFixed ? Visibility.Collapsed : Visibility.Visible;
     public Visibility AudioVisibility => IsAudio ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility ClockVisibility => IsClock ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Nur Uhren: Einstellungen dieser Uhr (wird auf der Seite "Uhr &amp; Kalender" bearbeitet).</summary>
+    public ClockSettings Clock { get; }
+
+    /// <summary>Nur Audio-Widgets: Farbe der Symbole.</summary>
+    public string IconColor
+    {
+        get => _iconColor;
+        set
+        {
+            if (SetProperty(ref _iconColor, value ?? "")) _iconColorCustom = true;
+        }
+    }
+
+    /// <summary>Nur Audio-Widgets: Farbe der Gerätenamen.</summary>
+    public string LabelColor
+    {
+        get => _labelColor;
+        set
+        {
+            if (SetProperty(ref _labelColor, value ?? "")) _labelColorCustom = true;
+        }
+    }
 
     public bool Enabled { get => _enabled; set => SetProperty(ref _enabled, value); }
 
@@ -154,6 +211,10 @@ public sealed class WidgetRowViewModel : ObservableObject
         FreeX = live is null ? _entry.FreeX : live.FreeX,
         FreeY = live is null ? _entry.FreeY : live.FreeY,
         Devices = AllDevices ? [] : Devices.Where(d => d.Selected).Select(d => d.Id).ToList(),
+        // Ohne eigene Farbe (null) folgt das Widget der Schriftfarbe der Leiste.
+        IconColor = IsAudio && _iconColorCustom ? IconColor : null,
+        LabelColor = IsAudio && _labelColorCustom ? LabelColor : null,
+        Clock = IsClock ? Clock.Clone() : null,
     };
 }
 
