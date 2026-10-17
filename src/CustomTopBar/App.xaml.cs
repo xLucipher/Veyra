@@ -8,6 +8,7 @@ using CustomTopBar.Bar;
 using CustomTopBar.Configuration;
 using CustomTopBar.Core;
 using CustomTopBar.SettingsUI;
+using CustomTopBar.Updates;
 
 namespace CustomTopBar;
 
@@ -17,6 +18,7 @@ public partial class App : Application
     private SingleInstance? _singleInstance;
     private SettingsService? _settings;
     private BarManager? _bar;
+    private UpdateManager? _updates;
     private SettingsWindow? _settingsWindow;
     private bool _cleanedUp;
 
@@ -53,6 +55,10 @@ public partial class App : Application
         _bar = new BarManager(_settings, ShowSettings, ExitApplication);
         _bar.Start();
 
+        // Update-Prüfung über GitHub Releases – nie während eines Vollbildspiels.
+        _updates = new UpdateManager(_settings, () => _bar.IsHiddenForFullscreen, ExitApplication);
+        _updates.Start();
+
         _singleInstance.ListenForActivation(
             () => Dispatcher.BeginInvoke(ShowSettings),
             () => Dispatcher.BeginInvoke(ExitApplication));
@@ -70,7 +76,8 @@ public partial class App : Application
 
         if (_settingsWindow is null)
         {
-            _settingsWindow = new SettingsWindow(new SettingsViewModel(_settings, ExitApplication));
+            _settingsWindow = new SettingsWindow(new SettingsViewModel(_settings, ExitApplication,
+                () => _updates?.CheckNowAsync() ?? Task.FromResult("Update-Dienst nicht verfügbar.")));
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
             _settingsWindow.Show(); // nicht modal – die Leiste läuft unabhängig weiter
         }
@@ -95,6 +102,7 @@ public partial class App : Application
         try
         {
             _settingsWindow?.Close();
+            _updates?.Dispose();
             _bar?.Dispose();
             _settings?.Dispose();
         }

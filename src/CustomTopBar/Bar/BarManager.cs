@@ -34,6 +34,9 @@ public sealed class BarManager : IDisposable
     private TopBarWindow? _window;
     private MonitorInfo? _monitor;
     private bool _hiddenForFullscreen;
+
+    /// <summary>True, solange die Leiste wegen einer Vollbildanwendung ausgeblendet ist (dann nicht stören).</summary>
+    public bool IsHiddenForFullscreen => _hiddenForFullscreen;
     private bool _forceNextLayout;
     private bool _floatingWarningLogged;
     private bool _autoHideWarningLogged;

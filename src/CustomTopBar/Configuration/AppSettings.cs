@@ -26,6 +26,8 @@ public sealed class AppSettings
 
     public AudioSettings Audio { get; set; } = new();
 
+    public UpdateSettings Updates { get; set; } = new();
+
     public AppSettings Clone() => SettingsService.Deserialize(SettingsService.Serialize(this)) ?? new AppSettings();
 
     /// <summary>Ersetzt fehlende/ungültige Werte durch Standardwerte und begrenzt Zahlen auf sinnvolle Bereiche.</summary>
@@ -36,6 +38,7 @@ public sealed class AppSettings
         Clock ??= new ClockSettings();
         System ??= new SystemSettings();
         Audio ??= new AudioSettings();
+        Updates ??= new UpdateSettings();
         Widgets = Widgets?.Where(w => w is not null && Enum.IsDefined(w.Type)).ToList()
                   ?? WidgetEntry.Defaults();
         foreach (var widget in Widgets) widget.Normalize();
@@ -48,7 +51,23 @@ public sealed class AppSettings
         Clock.Normalize();
         System.Normalize();
         Audio.Normalize();
+        Updates.SkippedVersion = Updates.SkippedVersion?.Trim() ?? "";
     }
+}
+
+/// <summary>Update-Prüfung über GitHub Releases.</summary>
+public sealed class UpdateSettings
+{
+    /// <summary>Beim Start (verzögert) und danach regelmäßig nach Updates suchen.</summary>
+    public bool AutoCheck { get; set; } = true;
+
+    /// <summary>Mit "Nein" übersprungene Version – erst eine neuere Version wird wieder angeboten.</summary>
+    public string SkippedVersion { get; set; } = "";
+
+    /// <summary>Mit "Später" verschoben: vor diesem Zeitpunkt (UTC) wird nicht erneut gefragt.</summary>
+    public DateTime? RemindAfterUtc { get; set; }
+
+    public DateTime? LastCheckUtc { get; set; }
 }
 
 public enum WidgetType

@@ -162,6 +162,35 @@
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
+                            <TextBlock Text="Updates" Style="{StaticResource CardTitle}" />
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Settings.Updates.AutoCheck}" VerticalAlignment="Center" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Automatisch nach Updates suchen" Style="{StaticResource RowTitle}" />
+                                    <TextBlock Text="Kurz nach dem Start und danach alle 6 Stunden auf GitHub. Bei einem neuen Release wirst du gefragt – nie während eines Vollbildspiels." Style="{StaticResource RowHint}" />
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource Divider}" />
+                            <DockPanel Style="{StaticResource Row}">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Command="{Binding OpenReleasesCommand}" Margin="0,0,8,0" Content="Release-Seite" />
+                                    <Button Command="{Binding CheckForUpdatesCommand}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE895;" Style="{StaticResource Glyph}" FontSize="13" Margin="0,0,8,0" />
+                                            <TextBlock Text="Jetzt nach Updates suchen" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding CurrentVersionText}" Style="{StaticResource RowTitle}" />
+                                    <TextBlock Text="{Binding UpdateStatus}" Style="{StaticResource RowHint}" />
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
                             <TextBlock Text="Dateien" Style="{StaticResource CardTitle}" />
                             <DockPanel Style="{StaticResource Row}">
                                 <Button DockPanel.Dock="Right" Content="Öffnen" Command="{Binding OpenSettingsFileCommand}" MinWidth="100" Margin="12,0,0,0" />

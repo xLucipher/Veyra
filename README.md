@@ -54,6 +54,7 @@ src/CustomTopBar/
 │  ├─ Clock/                  Uhr (ClockWidget, ClockView) und Kalender-Flyout
 │  └─ Audio/                  Audiogeräte-Buttons (Wiedergabe/Mikrofon)
 ├─ Audio/                     Core Audio per COM: Geräte auflisten, Standardgerät setzen, Änderungen melden
+├─ Updates/                   Update-Prüfung über GitHub Releases, Update-Fenster, Installation
 ├─ Fullscreen/                Vollbild-Erkennung
 │  ├─ FullscreenDetector.cs   Ereignisgesteuerte Heuristik mit Entprellung
 │  └─ WindowInspector.cs      Fenster-Abfragen (Klasse, Prozess, Cloaking, Stile)
@@ -141,6 +142,30 @@ Widgets werden unter **Einstellungen → Widgets** hinzugefügt, aktiviert oder 
 **Uhr:** Ein Klick öffnet einen Monatskalender direkt unter der Uhr. Ein Klick daneben oder Esc schließt ihn.
 
 **Farben:** Ein Klick auf das Farbfeld öffnet einen Farbkreis. Darin klicken oder gedrückt halten und ziehen, darunter sitzt ein Helligkeitsregler. Alternativ gibt es Vorlagen und das Hex-Feld.
+
+## Updates
+
+Die Leiste aktualisiert sich über **GitHub Releases** dieses Repositorys. Weil es öffentlich ist, braucht es dafür keine Anmeldung und keinen Token.
+
+- **Prüfung:** 20 s nach dem Start und danach alle 6 Stunden. Während die Leiste wegen eines Vollbildspiels ausgeblendet ist, wird nie gefragt, sondern einige Minuten später erneut geprüft.
+- **Gibt es eine neuere Version**, erscheint das Fenster „Update verfügbar“ mit den Neuerungen und drei Möglichkeiten:
+  - **Ja, installieren:** Das ZIP wird heruntergeladen und geprüft (Größe und SHA-256 aus GitHub). Dann beendet sich die Leiste, ein kleines Skript ersetzt die Dateien im Installationsordner, und die Leiste startet neu. Die Einstellungen in `%AppData%` bleiben unberührt.
+  - **Später:** Die Leiste fragt frühestens in 24 Stunden wieder.
+  - **Nein:** Diese Version wird übersprungen, erst eine neuere wird wieder angeboten.
+- **Einstellungen → Allgemein → Updates:** automatische Prüfung an oder aus, *Jetzt nach Updates suchen* (fragt auch bei übersprungener Version) und die Release-Seite.
+- **Installationsordner:** Er muss ohne Adminrechte beschreibbar sein, z. B. `%LocalAppData%\Programs\CustomTopBar`. Unter „Programme“ verweist das Update-Fenster stattdessen auf die Release-Seite.
+- **Protokoll der Installation:** `%TEMP%\CustomTopBar-update\install-update.log`.
+
+### Release veröffentlichen
+
+1. In `src/CustomTopBar/CustomTopBar.csproj` die `<Version>` erhöhen, committen und pushen.
+2. Paket bauen und als GitHub-Release veröffentlichen (Tag `v<Version>`, ZIP als Anhang):
+
+```bash
+.\build\release.ps1 -Publish -NotesFile .\notes.md
+```
+
+Ohne `-Publish` entsteht nur `artifacts\CustomTopBar-<Version>-win-x64.zip` zum Testen. Ohne Notizdatei erzeugt GitHub die Release-Notizen aus den Commits. Das Skript veröffentlicht nur von einem sauberen, gepushten Stand.
 
 ## Konfiguration
 

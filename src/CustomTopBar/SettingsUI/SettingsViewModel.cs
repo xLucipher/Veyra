@@ -37,7 +37,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     private readonly AudioDeviceService _audioService = new();
     private WidgetInfo? _newWidget;
 
-    public SettingsViewModel(SettingsService service, Action exitApplication)
+    public SettingsViewModel(SettingsService service, Action exitApplication, Func<Task<string>> checkForUpdates)
     {
         _service = service;
         _settings = service.Current.Clone();
@@ -69,6 +69,13 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         AddForcedCommand = new RelayCommand(() => AddProcess(_settings.Behavior.FullscreenForcedProcesses, ForceCandidate, nameof(ForcedProcessesText)),
             () => !string.IsNullOrEmpty(ForceCandidate));
         ExitApplicationCommand = new RelayCommand(exitApplication);
+        CheckForUpdatesCommand = new RelayCommand(async () =>
+        {
+            UpdateStatus = "Suche nach Updates …";
+            UpdateStatus = await checkForUpdates();
+        }, () => UpdateStatus != "Suche nach Updates …");
+        OpenReleasesCommand = new RelayCommand(() => Updates.UpdateService.OpenReleasePage());
+        UpdateStatus = DescribeLastCheck();
         AddWidgetCommand = new RelayCommand(AddWidget, () => NewWidget is not null);
         RefreshAudioDevicesCommand = new RelayCommand(RebuildAudioRows);
         _audioService.Changed += (_, _) => RebuildAudioRows();
@@ -170,6 +177,12 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             .Select(r => r.ToEntry(live.TryGetValue(r.Id, out var position) ? position : null))
             .ToList();
 
+        // Update-Entscheidungen ("Später"/"Nein") werden vom Update-Dienst gespeichert – nicht überschreiben.
+        var liveUpdates = _service.Current.Updates;
+        _settings.Updates.SkippedVersion = liveUpdates.SkippedVersion;
+        _settings.Updates.RemindAfterUtc = liveUpdates.RemindAfterUtc;
+        _settings.Updates.LastCheckUtc = liveUpdates.LastCheckUtc;
+
         foreach (var row in OutputDeviceRows.Concat(InputDeviceRows))
         {
             var entry = _settings.Audio.Find(row.Device.Id);
@@ -202,6 +215,18 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public ICommand AddExcludedCommand { get; }
     public ICommand AddForcedCommand { get; }
     public ICommand ExitApplicationCommand { get; }
+    public ICommand CheckForUpdatesCommand { get; }
+    public ICommand OpenReleasesCommand { get; }
+
+    public string CurrentVersionText => $"Installierte Version: {Updates.UpdateService.CurrentVersion}";
+
+    private string _updateStatus = "";
+    public string UpdateStatus { get => _updateStatus; private set => SetProperty(ref _updateStatus, value); }
+
+    private string DescribeLastCheck() =>
+        _service.Current.Updates.LastCheckUtc is { } last
+            ? $"Zuletzt geprüft: {last.ToLocalTime():dd.MM.yyyy HH:mm}"
+            : "Noch nicht geprüft.";
 
     public AppSettings Settings => _settings;
 
