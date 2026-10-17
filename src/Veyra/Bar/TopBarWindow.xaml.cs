@@ -155,7 +155,29 @@ public partial class TopBarWindow : Window
         if (PresentationSource.FromVisual((System.Windows.Controls.ContextMenu)sender) is not HwndSource source) return;
         _menuHandle = source.Handle;
         _foregroundBeforeMenu = GetForegroundWindow();
+        KeepMenuAboveBar();
         SetForegroundWindow(_menuHandle);
+    }
+
+    private bool _raisingMenu;
+
+    /// <summary>
+    /// Das Menü ist ein eigenes Popup-Fenster. Die Leiste holt sich bei jedem Vordergrundwechsel (auch dem durch
+    /// das Menü selbst) wieder nach oben und würde es sonst verdecken – deshalb liegt das offene Menü immer
+    /// ganz oben in der Topmost-Ebene, auch bei Leisten der Ebene "Normal" oder "Im Hintergrund".
+    /// </summary>
+    private void KeepMenuAboveBar()
+    {
+        if (_menuHandle == IntPtr.Zero || _raisingMenu) return;
+        _raisingMenu = true;
+        try
+        {
+            SetWindowPos(_menuHandle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+        finally
+        {
+            _raisingMenu = false;
+        }
     }
 
     /// <summary>
@@ -354,6 +376,7 @@ public partial class TopBarWindow : Window
 
                 case WM_WINDOWPOSCHANGED:
                     AppBar?.NotifyWindowPosChanged();
+                    KeepMenuAboveBar(); // Leiste nach oben geholt → offenes Menü bleibt darüber
                     break;
 
                 case WM_WINDOWPOSCHANGING when IsDynamic && Layer == Veyra.Configuration.WindowLayer.Desktop:

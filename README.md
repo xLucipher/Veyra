@@ -9,8 +9,8 @@
 
 ## Funktionen
 
-- **Digitaluhr** exakt in der Bildschirmmitte, wahlweise mit Datum und Kalenderwoche. Ein Klick öffnet den Monatskalender.
-- **Audio-Schnellwechsel:** Buttons für Wiedergabegeräte und Mikrofone. Ein Klick macht das Gerät zum Standard, das aktive ist markiert. Pro Gerät lassen sich Symbol und Kurzname wählen.
+- **Digitaluhr** exakt in der Bildschirmmitte, wahlweise mit Datum und Kalenderwoche. Ein Klick öffnet den Monatskalender. Mehrere Uhren lassen sich unabhängig voneinander gestalten (Format, Schrift, Farben, Sprache).
+- **Audio-Schnellwechsel:** Buttons für Wiedergabegeräte und Mikrofone. Ein Klick macht das Gerät zum Standard, das aktive ist markiert. Pro Gerät lassen sich Symbol und Kurzname wählen, pro Widget die Farbe von Symbolen und Namen.
 - **Widgets frei anordnen:** Die Uhr hat feste Positionen (links, Mitte, rechts). Alle anderen Widgets verschiebst du per Drag & Drop direkt auf der Leiste, ohne dass sie sich überlappen. Mit der **freien Platzierung** lassen sich alle Widgets, auch die Uhr, beliebig auf der Leiste ablegen, auch übereinander oder in die Ecken.
 - **Automatisch ausgeblendet bei Vollbild:** bei Spielen (exklusiv und randlos), Videos und Browser-Vollbild. Danach erscheint die Leiste wieder.
 - **Gaming-freundlich:** praktisch keine CPU-Last im Leerlauf, keine GPU-Nutzung, kein Fokusdiebstahl und kein Eintrag in Alt+Tab.
