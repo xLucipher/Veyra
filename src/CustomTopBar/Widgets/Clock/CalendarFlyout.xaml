@@ -1,0 +1,26 @@
+<Window x:Class="CustomTopBar.Widgets.Clock.CalendarFlyout"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Kalender"
+        ThemeMode="Dark"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        SizeToContent="Height"
+        Width="340"
+        Background="#2A2B32">
+    <Border BorderBrush="#3A3C46" BorderThickness="1" Padding="18,16,18,14">
+        <StackPanel>
+            <TextBlock x:Name="TimeText" FontSize="30" FontWeight="SemiBold" Typography.NumeralAlignment="Tabular" />
+            <TextBlock x:Name="DateText" FontSize="14" Opacity="0.75" Margin="0,2,0,0" />
+            <Viewbox Stretch="Uniform" StretchDirection="Both" Margin="0,14,0,0">
+                <Calendar x:Name="MonthCalendar" IsTodayHighlighted="True" />
+            </Viewbox>
+            <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                <Button DockPanel.Dock="Left" Content="Heute" Click="OnTodayClick" />
+                <Button DockPanel.Dock="Right" Content="Datum &amp; Uhrzeit …" Click="OnOpenSystemSettings" />
+            </DockPanel>
+        </StackPanel>
+    </Border>
+</Window>

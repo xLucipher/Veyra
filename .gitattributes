@@ -1,0 +1,5 @@
+# Zeilenenden im Repository einheitlich (LF), beim Auschecken unter Windows CRLF
+* text=auto
+*.sln text eol=crlf
+*.png binary
+*.ico binary
