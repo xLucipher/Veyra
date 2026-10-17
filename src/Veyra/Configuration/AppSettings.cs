@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Serialization;
 using Veyra.Core;
 
 namespace Veyra.Configuration;
@@ -28,43 +29,98 @@ public enum WindowLayer
 /// <summary>Wurzelobjekt von %AppData%\Veyra\settings.json.</summary>
 public sealed class AppSettings
 {
-    public int Version { get; set; } = 2;
-    public AppearanceSettings Appearance { get; set; } = new();
+    public int Version { get; set; } = 3;
+
+    /// <summary>Alle Leisten. Es gibt immer mindestens eine.</summary>
+    public List<BarSettings> Bars { get; set; } = [];
+
     public BehaviorSettings Behavior { get; set; } = new();
     public ClockSettings Clock { get; set; } = new();
     public SystemSettings System { get; set; } = new();
-
-    /// <summary>Widgets auf der Leiste. Reihenfolge in der Liste = Reihenfolge innerhalb eines Bereichs.</summary>
-    public List<WidgetEntry> Widgets { get; set; } = WidgetEntry.Defaults();
 
     public AudioSettings Audio { get; set; } = new();
 
     public UpdateSettings Updates { get; set; } = new();
 
+    /// <summary>Nur zum Einlesen älterer Dateien mit genau einer Leiste: wird in <see cref="Bars"/> übernommen.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public AppearanceSettings? Appearance { get; set; }
+
+    /// <inheritdoc cref="Appearance"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<WidgetEntry>? Widgets { get; set; }
+
     public AppSettings Clone() => SettingsService.Deserialize(SettingsService.Serialize(this)) ?? new AppSettings();
+
+    public BarSettings? FindBar(string? id) => Bars.FirstOrDefault(b => b.Id == id);
 
     /// <summary>Ersetzt fehlende/ungültige Werte durch Standardwerte und begrenzt Zahlen auf sinnvolle Bereiche.</summary>
     public void Normalize()
     {
-        Appearance ??= new AppearanceSettings();
         Behavior ??= new BehaviorSettings();
         Clock ??= new ClockSettings();
         System ??= new SystemSettings();
         Audio ??= new AudioSettings();
         Updates ??= new UpdateSettings();
-        Widgets = Widgets?.Where(w => w is not null && Enum.IsDefined(w.Type)).ToList()
-                  ?? WidgetEntry.Defaults();
-        foreach (var widget in Widgets) widget.Normalize();
-        // Doppelte IDs (z. B. kopierte Einträge) würden Drag & Drop verwechseln.
-        foreach (var duplicate in Widgets.GroupBy(w => w.Id).SelectMany(g => g.Skip(1)))
+
+        Bars = Bars?.Where(b => b is not null).ToList() ?? [];
+        if (Bars.Count == 0)
+        {
+            // Ältere Datei (eine Leiste) oder neue Installation → erste Leiste aus den bisherigen Werten.
+            Bars.Add(new BarSettings
+            {
+                Appearance = Appearance ?? new AppearanceSettings(),
+                Widgets = Widgets ?? WidgetEntry.Defaults(),
+                MonitorSelection = System.MonitorSelection ?? MonitorDefault,
+            });
+        }
+        Appearance = null;
+        Widgets = null;
+        System.MonitorSelection = null;
+        Version = 3;
+
+        for (int i = 0; i < Bars.Count; i++) Bars[i].Normalize(i);
+        // Doppelte IDs (z. B. kopierte Einträge) würden Leisten bzw. Drag & Drop verwechseln – über alle Leisten hinweg.
+        foreach (var duplicate in Bars.GroupBy(b => b.Id).SelectMany(g => g.Skip(1)))
+            duplicate.Id = WidgetEntry.NewId();
+        foreach (var duplicate in Bars.SelectMany(b => b.Widgets).GroupBy(w => w.Id).SelectMany(g => g.Skip(1)))
             duplicate.Id = WidgetEntry.NewId();
 
-        Appearance.Normalize();
         Behavior.Normalize();
         Clock.Normalize();
         System.Normalize();
         Audio.Normalize();
         Updates.SkippedVersion = Updates.SkippedVersion?.Trim() ?? "";
+    }
+
+    public const string MonitorDefault = "Primary";
+}
+
+/// <summary>Eine Leiste: eigenes Fenster mit Modus, Größe, Aussehen, Ebene, Monitor und eigenen Widgets.</summary>
+public sealed class BarSettings
+{
+    public string Id { get; set; } = WidgetEntry.NewId();
+
+    /// <summary>Anzeigename in den Einstellungen; leer = "Leiste N".</summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>"Primary" oder ein Gerätename wie "\\.\DISPLAY2".</summary>
+    public string MonitorSelection { get; set; } = AppSettings.MonitorDefault;
+
+    public AppearanceSettings Appearance { get; set; } = new();
+
+    /// <summary>Widgets auf dieser Leiste. Reihenfolge in der Liste = Reihenfolge innerhalb eines Bereichs.</summary>
+    public List<WidgetEntry> Widgets { get; set; } = WidgetEntry.Defaults();
+
+    internal void Normalize(int index)
+    {
+        if (string.IsNullOrWhiteSpace(Id)) Id = WidgetEntry.NewId();
+        Name = string.IsNullOrWhiteSpace(Name) ? $"Leiste {index + 1}" : Name.Trim();
+        MonitorSelection = string.IsNullOrWhiteSpace(MonitorSelection) ? AppSettings.MonitorDefault : MonitorSelection.Trim();
+        Appearance ??= new AppearanceSettings();
+        Appearance.Normalize();
+        Widgets = Widgets?.Where(w => w is not null && Enum.IsDefined(w.Type)).ToList() ?? WidgetEntry.Defaults();
+        foreach (var widget in Widgets) widget.Normalize();
     }
 }
 
@@ -135,8 +191,14 @@ public sealed class WidgetEntry
 
     public double? FreeY { get; set; }
 
+    /// <summary>Größe des Widgets als Faktor (1 = normal, 2 = doppelt so groß). Wirkt auf Schrift, Symbole und Abstände.</summary>
+    public double Scale { get; set; } = 1.0;
+
     /// <summary>Nur Audio-Widgets: angezeigte Geräte (Endpunkt-IDs). Leer = alle aktiven Geräte.</summary>
     public List<string> Devices { get; set; } = [];
+
+    public const double MinScale = 0.25;
+    public const double MaxScale = 8;
 
     public static bool IsFixedType(WidgetType type) => type == WidgetType.Clock;
 
@@ -173,6 +235,7 @@ public sealed class WidgetEntry
             FreeX = Math.Clamp(Math.Round(fx, 4), 0, 1);
             FreeY = Math.Clamp(Math.Round(fy, 4), 0, 1);
         }
+        Scale = double.IsFinite(Scale) && Scale > 0 ? Math.Clamp(Math.Round(Scale, 3), MinScale, MaxScale) : 1.0;
         Devices = (Devices ?? []).Where(d => !string.IsNullOrWhiteSpace(d))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
@@ -304,7 +367,7 @@ public sealed class BehaviorSettings
     public bool AlwaysOnTop { get; set; } = true;
 
     /// <summary>Reserviert den Bereich als Windows-AppBar (maximierte Fenster beginnen unterhalb der Leiste).</summary>
-    public bool ReserveScreenSpace { get; set; }
+    public bool ReserveScreenSpace { get; set; } = true;
 
     /// <summary>Automatisches Ein-/Ausblenden am oberen Rand (geplant, noch nicht implementiert).</summary>
     public bool AutoHide { get; set; }
@@ -464,8 +527,9 @@ public sealed class SystemSettings
 {
     public bool StartWithWindows { get; set; }
 
-    /// <summary>"Primary" oder ein Gerätename wie "\\.\DISPLAY2".</summary>
-    public string MonitorSelection { get; set; } = "Primary";
+    /// <summary>Nur noch zum Einlesen älterer Dateien (vor mehreren Leisten): wird nach <see cref="BarSettings.MonitorSelection"/> übernommen.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MonitorSelection { get; set; }
 
     /// <summary>Info-/Diagnose-Logging. Fehler und Warnungen werden immer protokolliert.</summary>
     public bool EnableLogging { get; set; } = true;
@@ -475,6 +539,5 @@ public sealed class SystemSettings
 
     internal void Normalize()
     {
-        MonitorSelection = string.IsNullOrWhiteSpace(MonitorSelection) ? "Primary" : MonitorSelection.Trim();
     }
 }

@@ -140,6 +140,42 @@ public partial class TopBarWindow : Window
         SetWindowPos(Handle, insertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
     }
 
+    // ---- Kontextmenü -----------------------------------------------------------------------
+
+    private IntPtr _menuHandle;
+    private IntPtr _foregroundBeforeMenu;
+
+    /// <summary>
+    /// Die Leiste wird nie aktiviert (WS_EX_NOACTIVATE). Ohne aktives Fenster sieht das Menü Klicks in andere
+    /// Fenster nicht und bliebe offen. Deshalb holt es sich beim Öffnen den Vordergrund: Dann schließt jeder
+    /// Klick außerhalb (und Esc) das Menü.
+    /// </summary>
+    private void OnContextMenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (PresentationSource.FromVisual((System.Windows.Controls.ContextMenu)sender) is not HwndSource source) return;
+        _menuHandle = source.Handle;
+        _foregroundBeforeMenu = GetForegroundWindow();
+        SetForegroundWindow(_menuHandle);
+    }
+
+    /// <summary>
+    /// Menü ohne Folgefenster geschlossen (Esc, Klick auf die Leiste) → Fokus an das vorherige Fenster zurückgeben.
+    /// Hat ein Klick ein anderes Fenster aktiviert oder ein Menüpunkt die Einstellungen geöffnet, bleibt es dabei.
+    /// </summary>
+    private void OnContextMenuClosed(object sender, RoutedEventArgs e)
+    {
+        IntPtr menu = _menuHandle, previous = _foregroundBeforeMenu;
+        _menuHandle = IntPtr.Zero;
+        _foregroundBeforeMenu = IntPtr.Zero;
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            var foreground = GetForegroundWindow();
+            bool stillOurs = foreground == IntPtr.Zero || foreground == menu || foreground == Handle;
+            if (stillOurs && previous != IntPtr.Zero && previous != menu && IsWindowVisible(previous))
+                SetForegroundWindow(previous);
+        });
+    }
+
     // ---- Dynamischer Modus: Verschieben und Größenänderung ---------------------------------
 
     protected override void OnPreviewMouseMove(System.Windows.Input.MouseEventArgs e)

@@ -52,14 +52,14 @@ public sealed class AudioDevicesWidget : ObservableObject, IBarWidget
 
     public FontFamily FontFamily { get => _fontFamily; private set => SetProperty(ref _fontFamily, value); }
 
-    public void ApplySettings(AppSettings settings)
+    public void ApplySettings(AppSettings settings, BarSettings bar)
     {
         _audio = settings.Audio;
         // Geräteauswahl dieser Widget-Instanz; leer = alle aktiven Geräte (neue erscheinen automatisch).
-        var entry = settings.Widgets.FirstOrDefault(w => w.Id == _entryId);
+        var entry = bar.Widgets.FirstOrDefault(w => w.Id == _entryId);
         _selectedDevices = new HashSet<string>(entry?.Devices ?? [], StringComparer.OrdinalIgnoreCase);
-        Foreground = ColorUtil.ToBrush(settings.Appearance.ForegroundColor, Colors.White);
-        FontFamily = new FontFamily(settings.Appearance.FontFamily);
+        Foreground = ColorUtil.ToBrush(bar.Appearance.ForegroundColor, Colors.White);
+        FontFamily = new FontFamily(bar.Appearance.FontFamily);
         if (_running) Rebuild();
     }
 

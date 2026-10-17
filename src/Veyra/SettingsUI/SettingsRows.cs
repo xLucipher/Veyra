@@ -33,6 +33,8 @@ public static class WidgetCatalog
     public static IReadOnlyList<double> MarginPresets { get; } = [0, 4, 8, 12, 16, 24, 32, 48, 64];
 
     public static IReadOnlyList<double> SpacingPresets { get; } = [0, 4, 8, 12, 16, 24, 32, 48];
+
+    public static IReadOnlyList<double> ScalePresets { get; } = [50, 75, 100, 125, 150, 200, 250, 300, 400, 500];
 }
 
 /// <summary>Ein Gerät mit Häkchen in einem Audio-Widget.</summary>
@@ -57,6 +59,7 @@ public sealed class WidgetRowViewModel : ObservableObject
     private bool _enabled;
     private double _outerMargin;
     private double _innerSpacing;
+    private double _scalePercent;
     private bool _allDevices;
 
     public WidgetRowViewModel(WidgetEntry entry, IReadOnlyList<AudioDevice> devices, AudioSettings audio, Action<WidgetRowViewModel> remove)
@@ -67,6 +70,7 @@ public sealed class WidgetRowViewModel : ObservableObject
         _enabled = entry.Enabled;
         _outerMargin = entry.OuterMargin;
         _innerSpacing = entry.InnerSpacing;
+        _scalePercent = Math.Round(entry.Scale * 100);
         _allDevices = entry.Devices.Count == 0;
         RemoveCommand = new RelayCommand(() => remove(this));
 
@@ -116,6 +120,9 @@ public sealed class WidgetRowViewModel : ObservableObject
     public double OuterMargin { get => _outerMargin; set => SetProperty(ref _outerMargin, value); }
     public double InnerSpacing { get => _innerSpacing; set => SetProperty(ref _innerSpacing, value); }
 
+    /// <summary>Größe in Prozent (100 = normal).</summary>
+    public double ScalePercent { get => _scalePercent; set => SetProperty(ref _scalePercent, value); }
+
     public bool AllDevices
     {
         get => _allDevices;
@@ -142,6 +149,7 @@ public sealed class WidgetRowViewModel : ObservableObject
         Slot = Slot,
         OuterMargin = OuterMargin,
         InnerSpacing = InnerSpacing,
+        Scale = ScalePercent / 100,
         Position = live?.Position ?? _entry.Position,
         FreeX = live is null ? _entry.FreeX : live.FreeX,
         FreeY = live is null ? _entry.FreeY : live.FreeY,
@@ -184,4 +192,15 @@ public sealed class AudioDeviceRowViewModel : ObservableObject
     public string AutoIconKey => AudioIcons.Auto(Device.Flow, Device.FormFactor, Device.Name);
 
     public bool IsCustomized => Icon != AudioIcons.AutoKey || Label.Length > 0;
+}
+
+/// <summary>Eintrag in der Leistenauswahl; der Name aktualisiert sich beim Umbenennen sofort.</summary>
+public sealed class BarOption(int index, string name) : ObservableObject
+{
+    private string _name = name;
+
+    public int Index { get; } = index;
+    public string Name { get => _name; set => SetProperty(ref _name, value); }
+
+    public override string ToString() => Name; // Name für Bildschirmleser
 }

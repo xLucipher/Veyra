@@ -75,7 +75,11 @@ try {
     if (git tag --list $tag) { throw "Tag $tag existiert bereits. Version in der .csproj erhoehen." }
 
     git tag -a $tag -m "Veyra $version"
-    git push origin $tag
+    # git schreibt Fortschrittsmeldungen nach stderr; unter Windows PowerShell 5 waere das sonst ein Abbruch.
+    $ErrorActionPreference = 'Continue'
+    git push origin $tag 2>&1 | Write-Host
+    $ErrorActionPreference = 'Stop'
+    if ($LASTEXITCODE -ne 0) { throw "git push des Tags fehlgeschlagen ($LASTEXITCODE)." }
 
     $notesArgs = if ($NotesFile) { @('--notes-file', $NotesFile) } elseif ($Notes) { @('--notes', $Notes) } else { @('--generate-notes') }
     & $gh release create $tag $setup $zip --title "Veyra $version" @notesArgs

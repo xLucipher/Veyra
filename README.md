@@ -15,6 +15,7 @@
 - **Automatisch ausgeblendet bei Vollbild:** bei Spielen (exklusiv und randlos), Videos und Browser-Vollbild. Danach erscheint die Leiste wieder.
 - **Gaming-freundlich:** praktisch keine CPU-Last im Leerlauf, keine GPU-Nutzung, kein Fokusdiebstahl und kein Eintrag in Alt+Tab.
 - **Fixiert oder dynamisch:** oben über die volle Breite angedockt – oder als frei bewegliches Fenster mit eigener Größe, Transparenz, abgerundeten Ecken und wählbarer Ebene (z. B. als durchsichtige Uhr im Hintergrund des Desktops).
+- **Mehrere Leisten:** beliebig viele Leisten, jede mit eigener Darstellung, Ebene, Monitor und eigenen Widgets – z. B. eine durchsichtige Uhr auf dem Desktop und eine Audio-Leiste immer im Vordergrund.
 - **Anpassbar:** Farben (inklusive Farbkreis), Schriften, Höhe, Formate, Monitor und optional ein reservierter Bildschirmbereich. Änderungen wirken sofort.
 - **Automatische Updates** über GitHub, mit Rückfrage.
 

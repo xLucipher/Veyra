@@ -5,7 +5,7 @@ namespace Veyra.Widgets;
 
 /// <summary>
 /// Vertrag für Leisten-Widgets (Uhr, Audiogeräte, später CPU, RAM, Medien …).
-/// Position und Reihenfolge kommen aus der Konfiguration (<see cref="AppSettings.Widgets"/>).
+/// Position und Reihenfolge kommen aus der Konfiguration (<see cref="BarSettings.Widgets"/>).
 /// Widgets werden angehalten, solange die Leiste ausgeblendet ist (z. B. während eines Vollbildspiels),
 /// damit im Hintergrund keinerlei Timer oder UI-Updates laufen.
 /// </summary>
@@ -13,7 +13,8 @@ public interface IBarWidget : IDisposable
 {
     FrameworkElement View { get; }
 
-    void ApplySettings(AppSettings settings);
+    /// <param name="bar">Die Leiste, auf der das Widget sitzt (Schrift, Farben, Widget-Eintrag).</param>
+    void ApplySettings(AppSettings settings, BarSettings bar);
 
     /// <summary>Aktualisierungen starten bzw. fortsetzen.</summary>
     void Start();

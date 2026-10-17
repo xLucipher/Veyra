@@ -44,7 +44,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         _geometrySnapshot = Geometry(_settings);
         CenterHorizontallyCommand = new RelayCommand(() =>
         {
-            _settings.Appearance.FloatingLeft = null;
+            Bar.Appearance.FloatingLeft = null;
             OnPropertyChanged(nameof(Settings));
         });
 
@@ -84,10 +84,13 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         UpdateStatus = DescribeLastCheck();
         AddWidgetCommand = new RelayCommand(AddWidget, () => NewWidget is not null);
         ResetFreePositionsCommand = new RelayCommand(ResetFreePositions);
+        AddBarCommand = new RelayCommand(AddBar);
+        RemoveBarCommand = new RelayCommand(RemoveBar, () => CanRemoveBar);
         RefreshAudioDevicesCommand = new RelayCommand(RebuildAudioRows);
         _audioService.Changed += (_, _) => RebuildAudioRows();
 
         _runningProcesses = SettingsOptions.GetWindowedProcessNames();
+        RebuildBarOptions();
         RebuildOptions();
         RefreshMonitors();
         RebuildWidgetRows();
@@ -107,6 +110,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public IReadOnlyList<EnumOption> SlotOptions => WidgetCatalog.Slots;
     public IReadOnlyList<double> MarginPresets => WidgetCatalog.MarginPresets;
     public IReadOnlyList<double> SpacingPresets => WidgetCatalog.SpacingPresets;
+    public IReadOnlyList<double> ScalePresets => WidgetCatalog.ScalePresets;
 
     // ---- Leistenmodus ----------------------------------------------------------------------
     public ICommand CenterHorizontallyCommand { get; }
@@ -128,12 +132,12 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     public BarMode BarMode
     {
-        get => _settings.Appearance.Mode;
+        get => Bar.Appearance.Mode;
         set
         {
-            if (!Enum.IsDefined(value) || value == _settings.Appearance.Mode) return;
-            _settings.Appearance.Mode = value;
-            if (value == BarMode.Floating && _settings.Appearance.FloatingLeft is null && _settings.Appearance.FloatingTop is null)
+            if (!Enum.IsDefined(value) || value == Bar.Appearance.Mode) return;
+            Bar.Appearance.Mode = value;
+            if (value == BarMode.Floating && Bar.Appearance.FloatingLeft is null && Bar.Appearance.FloatingTop is null)
                 InitDynamicFromFixed();
             OnPropertyChanged();
             OnPropertyChanged(nameof(FixedVisibility));
@@ -143,16 +147,16 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     }
 
     public System.Windows.Visibility FixedVisibility =>
-        _settings.Appearance.IsDynamic ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+        Bar.Appearance.IsDynamic ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
 
     public System.Windows.Visibility DynamicVisibility =>
-        _settings.Appearance.IsDynamic ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        Bar.Appearance.IsDynamic ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
 
     /// <summary>Erster Wechsel auf dynamisch: dieselbe Leiste, nur schwebend – oben, fast volle Breite, abgerundet.</summary>
     private void InitDynamicFromFixed()
     {
-        var a = _settings.Appearance;
-        var monitor = MonitorService.Resolve(_settings.System.MonitorSelection);
+        var a = Bar.Appearance;
+        var monitor = MonitorService.Resolve(Bar.MonitorSelection);
         double widthDip = monitor is null ? 1600 : monitor.Bounds.Width / monitor.Scale;
         a.Width = (int)Math.Max(200, widthDip - 32);
         a.FloatingHeight = a.Height;
@@ -160,10 +164,123 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         a.FloatingTop = 8;
     }
 
-    private (double? Left, double? Top, int Width, int Height, string Monitor) _geometrySnapshot;
+    /// <summary>Position/Größe/Monitor jeder Leiste beim Öffnen bzw. letzten Speichern (nach Leisten-ID).</summary>
+    private Dictionary<string, (double? Left, double? Top, int Width, int Height, string Monitor)> _geometrySnapshot = [];
 
-    private static (double? Left, double? Top, int Width, int Height, string Monitor) Geometry(AppSettings s) =>
-        (s.Appearance.FloatingLeft, s.Appearance.FloatingTop, s.Appearance.Width, s.Appearance.FloatingHeight, s.System.MonitorSelection);
+    private static (double? Left, double? Top, int Width, int Height, string Monitor) Geometry(BarSettings b) =>
+        (b.Appearance.FloatingLeft, b.Appearance.FloatingTop, b.Appearance.Width, b.Appearance.FloatingHeight, b.MonitorSelection);
+
+    private static Dictionary<string, (double? Left, double? Top, int Width, int Height, string Monitor)> Geometry(AppSettings s) =>
+        s.Bars.ToDictionary(b => b.Id, Geometry);
+
+    // ---- Leisten ---------------------------------------------------------------------------
+    private int _barIndex;
+
+    /// <summary>Die Leiste, deren Darstellung und Widgets gerade bearbeitet werden.</summary>
+    public BarSettings Bar => _settings.Bars[Math.Clamp(_barIndex, 0, _settings.Bars.Count - 1)];
+
+    public System.Collections.ObjectModel.ObservableCollection<BarOption> BarOptions { get; } = [];
+
+    public ICommand AddBarCommand { get; }
+    public ICommand RemoveBarCommand { get; }
+
+    public int SelectedBarIndex
+    {
+        get => _barIndex;
+        set
+        {
+            // WPF schreibt beim Austausch der Liste kurz -1 zurück – ignorieren.
+            if (value < 0 || value >= _settings.Bars.Count || value == _barIndex) return;
+            SyncWidgetRows();
+            _barIndex = value;
+            OnBarSwitched();
+        }
+    }
+
+    public string BarName
+    {
+        get => Bar.Name;
+        set
+        {
+            Bar.Name = value ?? "";
+            if (_barIndex < BarOptions.Count) BarOptions[_barIndex].Name = DisplayName(Bar, _barIndex);
+            OnPropertyChanged();
+        }
+    }
+
+    public bool CanRemoveBar => _settings.Bars.Count > 1;
+
+    public string BarHintText =>
+        $"Jede Leiste ist ein eigenes Fenster mit eigener Darstellung, Ebene, Monitor und eigenen Widgets. Vorhanden: {(_settings.Bars.Count == 1 ? "1 Leiste" : $"{_settings.Bars.Count} Leisten")}.";
+
+    /// <summary>Rechtsklick auf eine Leiste → Einstellungen öffnen sich mit dieser Leiste.</summary>
+    public void SelectBarById(string id)
+    {
+        int index = _settings.Bars.FindIndex(b => b.Id == id);
+        if (index >= 0) SelectedBarIndex = index;
+    }
+
+    private static string DisplayName(BarSettings bar, int index) =>
+        string.IsNullOrWhiteSpace(bar.Name) ? $"Leiste {index + 1}" : bar.Name.Trim();
+
+    private void RebuildBarOptions()
+    {
+        BarOptions.Clear();
+        for (int i = 0; i < _settings.Bars.Count; i++)
+            BarOptions.Add(new BarOption(i, DisplayName(_settings.Bars[i], i)));
+        OnPropertyChanged(nameof(SelectedBarIndex));
+        OnPropertyChanged(nameof(CanRemoveBar));
+        OnPropertyChanged(nameof(BarHintText));
+    }
+
+    /// <summary>Neue Leiste: kleine, dynamische Leiste mit Uhr, mittig oben auf dem Monitor der aktuellen Leiste.</summary>
+    private void AddBar()
+    {
+        SyncWidgetRows();
+        var bar = new BarSettings
+        {
+            Name = $"Leiste {_settings.Bars.Count + 1}",
+            MonitorSelection = Bar.MonitorSelection,
+            Appearance = new AppearanceSettings
+            {
+                Mode = BarMode.Floating,
+                Width = 320,
+                FloatingHeight = 96,
+                FloatingTop = 120,
+                CornerRadius = 16,
+                BackgroundColor = Bar.Appearance.BackgroundColor,
+                ForegroundColor = Bar.Appearance.ForegroundColor,
+                FontFamily = Bar.Appearance.FontFamily,
+                BorderColor = Bar.Appearance.BorderColor,
+            },
+            Widgets = [new WidgetEntry { Type = WidgetType.Clock, Slot = WidgetSlot.Center }],
+        };
+        bar.Normalize(_settings.Bars.Count);
+        _settings.Bars.Add(bar);
+        _barIndex = _settings.Bars.Count - 1;
+        OnBarSwitched();
+        StatusText = $"„{bar.Name}“ hinzugefügt – mit „Übernehmen“ anzeigen.";
+    }
+
+    private void RemoveBar()
+    {
+        if (_settings.Bars.Count <= 1) return;
+        var removed = Bar;
+        _settings.Bars.RemoveAt(_barIndex);
+        _barIndex = Math.Min(_barIndex, _settings.Bars.Count - 1);
+        OnBarSwitched();
+        StatusText = $"„{removed.Name}“ entfernt – mit „Übernehmen“ schließen.";
+    }
+
+    /// <summary>Andere Leiste ausgewählt bzw. Liste geändert → alle leistenbezogenen Felder neu lesen.</summary>
+    private void OnBarSwitched()
+    {
+        RebuildBarOptions();
+        RebuildOptions();
+        RefreshMonitors();
+        RebuildWidgetRows();
+        OnPropertyChanged(string.Empty);
+    }
 
     public IReadOnlyList<EnumOption> LabelModeOptions { get; } =
     [
@@ -180,7 +297,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     {
         WidgetRows.Clear();
         // Feste Widgets zuerst, freie danach von links nach rechts – so wie sie auf der Leiste stehen.
-        foreach (var entry in _settings.Widgets.OrderBy(w => w.IsFixed ? 0 : 1).ThenBy(w => w.IsFixed ? (double)w.Slot : w.Position))
+        foreach (var entry in Bar.Widgets.OrderBy(w => w.IsFixed ? 0 : 1).ThenBy(w => w.IsFixed ? (double)w.Slot : w.Position))
             WidgetRows.Add(CreateRow(entry));
     }
 
@@ -199,7 +316,13 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     private void ResetFreePositions()
     {
         var settings = _service.Current.Clone();
-        foreach (var widget in settings.Widgets)
+        var bar = settings.FindBar(Bar.Id);
+        if (bar is null)
+        {
+            StatusText = "Diese Leiste ist noch nicht übernommen.";
+            return;
+        }
+        foreach (var widget in bar.Widgets)
         {
             widget.FreeX = null;
             widget.FreeY = null;
@@ -246,26 +369,33 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void SyncRowsToSettings()
+    /// <summary>Widget-Zeilen der ausgewählten Leiste zurück in deren Einstellungen schreiben.</summary>
+    private void SyncWidgetRows()
     {
         // Positionen aus der laufenden Konfiguration übernehmen: Sie können sich per Drag & Drop
         // geändert haben, während dieses Fenster offen war.
-        var live = _service.Current.Widgets.ToDictionary(w => w.Id);
-        _settings.Widgets = WidgetRows
+        var live = _service.Current.Bars.SelectMany(b => b.Widgets).ToDictionary(w => w.Id);
+        Bar.Widgets = WidgetRows
             .Select(r => r.ToEntry(live.GetValueOrDefault(r.Id)))
             .ToList();
+    }
+
+    private void SyncRowsToSettings()
+    {
+        SyncWidgetRows();
 
         // Update-Entscheidungen ("Später"/"Nein") werden vom Update-Dienst gespeichert – nicht überschreiben.
-        // Position/Größe der dynamischen Leiste: Wurde sie hier nicht geändert, gilt der Stand aus der laufenden
+        // Position/Größe dynamischer Leisten: Wurde sie hier nicht geändert, gilt der Stand aus der laufenden
         // Konfiguration (sie kann per Maus verschoben worden sein, während dieses Fenster offen war).
-        if (Geometry(_settings) == _geometrySnapshot)
+        foreach (var bar in _settings.Bars)
         {
-            var liveSettings = _service.Current;
-            _settings.Appearance.FloatingLeft = liveSettings.Appearance.FloatingLeft;
-            _settings.Appearance.FloatingTop = liveSettings.Appearance.FloatingTop;
-            _settings.Appearance.Width = liveSettings.Appearance.Width;
-            _settings.Appearance.FloatingHeight = liveSettings.Appearance.FloatingHeight;
-            _settings.System.MonitorSelection = liveSettings.System.MonitorSelection;
+            var liveBar = _service.Current.FindBar(bar.Id);
+            if (liveBar is null || !_geometrySnapshot.TryGetValue(bar.Id, out var snapshot) || Geometry(bar) != snapshot) continue;
+            bar.Appearance.FloatingLeft = liveBar.Appearance.FloatingLeft;
+            bar.Appearance.FloatingTop = liveBar.Appearance.FloatingTop;
+            bar.Appearance.Width = liveBar.Appearance.Width;
+            bar.Appearance.FloatingHeight = liveBar.Appearance.FloatingHeight;
+            bar.MonitorSelection = liveBar.MonitorSelection;
         }
 
         var liveUpdates = _service.Current.Updates;
@@ -388,8 +518,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     public string AppearanceFontFamily
     {
-        get => _settings.Appearance.FontFamily;
-        set => SetIfNotEmpty(value, v => _settings.Appearance.FontFamily = v);
+        get => Bar.Appearance.FontFamily;
+        set => SetIfNotEmpty(value, v => Bar.Appearance.FontFamily = v);
     }
 
     public string ClockFontFamily
@@ -400,8 +530,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     public string MonitorSelection
     {
-        get => _settings.System.MonitorSelection;
-        set => SetIfNotEmpty(value, v => _settings.System.MonitorSelection = v);
+        get => Bar.MonitorSelection;
+        set => SetIfNotEmpty(value, v => Bar.MonitorSelection = v);
     }
 
     public string ExcludedProcessesText
@@ -429,8 +559,12 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     private void ReplaceSettings(AppSettings settings)
     {
+        // Ausgewählte Leiste beibehalten (Index kann sich nach dem Entfernen einer anderen verschoben haben).
+        string selectedId = Bar.Id;
         _settings = settings;
+        _barIndex = Math.Max(0, settings.Bars.FindIndex(b => b.Id == selectedId));
         _geometrySnapshot = Geometry(settings);
+        RebuildBarOptions();
         RebuildOptions();
         RefreshMonitors();
         RebuildWidgetRows();
@@ -450,7 +584,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         CultureOptions = SettingsOptions.BuildCultures(_settings.Clock.Culture);
         ShowDelayOptions = SettingsOptions.BuildDelays(_settings.Behavior.FullscreenShowDelayMs);
         SafetyIntervalOptions = SettingsOptions.BuildSafetyIntervals(_settings.Behavior.FullscreenSafetyCheckIntervalMs);
-        BorderThicknessOptions = SettingsOptions.BuildBorderThickness(_settings.Appearance.BorderThickness);
+        BorderThicknessOptions = SettingsOptions.BuildBorderThickness(Bar.Appearance.BorderThickness);
 
         // Nach dem Austausch der Listen die Auswahl erneut setzen.
         OnPropertyChanged(nameof(TimeFormat));
@@ -466,7 +600,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         options.AddRange(Monitors.Select(m => new Option(m.DeviceName, m.Description)));
 
         // Gespeicherter, aktuell nicht angeschlossener Monitor bleibt auswählbar.
-        var selected = _settings.System.MonitorSelection;
+        var selected = Bar.MonitorSelection;
         if (!options.Any(o => o.Value.Equals(selected, StringComparison.OrdinalIgnoreCase)))
             options.Add(new Option(selected, $"{selected} (nicht verbunden – primärer Monitor wird verwendet)"));
 

@@ -59,7 +59,7 @@ public sealed class ClockWidget : ObservableObject, IBarWidget
     public double DateFontSize { get => _dateFontSize; private set => SetProperty(ref _dateFontSize, value); }
     public Brush DateForeground { get => _dateForeground; private set => SetProperty(ref _dateForeground, value); }
 
-    public void ApplySettings(AppSettings settings)
+    public void ApplySettings(AppSettings settings, BarSettings bar)
     {
         var clock = settings.Clock;
 
@@ -72,7 +72,7 @@ public sealed class ClockWidget : ObservableObject, IBarWidget
         _secondResolution = ClockSettings.HasSeconds(_timeFormat);
         _culture = ClockSettings.ResolveCulture(clock.Culture);
 
-        var family = string.IsNullOrWhiteSpace(clock.FontFamily) ? settings.Appearance.FontFamily : clock.FontFamily;
+        var family = string.IsNullOrWhiteSpace(clock.FontFamily) ? bar.Appearance.FontFamily : clock.FontFamily;
         FontFamily = new FontFamily(family);
         FontSize = clock.FontSize;
         FontWeight = ParseWeight(clock.FontWeight);

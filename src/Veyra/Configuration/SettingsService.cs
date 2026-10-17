@@ -126,13 +126,15 @@ public sealed class SettingsService : IDisposable
     }
 
     /// <summary>
-    /// Widgets ohne ID (ältere oder von Hand bearbeitete Dateien) erhalten beim Laden eine neue ID. Diese muss
-    /// gespeichert werden, sonst wechselt sie bei jedem Neuladen und Drag-&amp;-Drop-Positionen gingen verloren.
+    /// Leisten und Widgets ohne ID (ältere oder von Hand bearbeitete Dateien) erhalten beim Laden eine neue ID. Diese
+    /// muss gespeichert werden, sonst wechselt sie bei jedem Neuladen und Drag-&amp;-Drop-Positionen gingen verloren.
+    /// Das gilt auch für die Übernahme einer älteren Datei mit nur einer Leiste.
     /// </summary>
     private void PersistGeneratedIds(string text, AppSettings settings)
     {
-        if (settings.Widgets.All(w => text.Contains($"\"{w.Id}\"", StringComparison.Ordinal))) return;
-        Log.Info("Settings", "Neue Widget-IDs vergeben und gespeichert");
+        bool Known(string id) => text.Contains($"\"{id}\"", StringComparison.Ordinal);
+        if (settings.Bars.All(b => Known(b.Id) && b.Widgets.All(w => Known(w.Id)))) return;
+        Log.Info("Settings", "Neue IDs vergeben bzw. Leisten übernommen und gespeichert");
         Write(settings);
     }
 

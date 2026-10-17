@@ -67,7 +67,7 @@ public partial class App : Application
         _updates.Start();
 
         _singleInstance.ListenForActivation(
-            () => Dispatcher.BeginInvoke(ShowSettings),
+            () => Dispatcher.BeginInvoke(() => ShowSettings(null)),
             () => Dispatcher.BeginInvoke(ExitApplication));
     }
 
@@ -77,7 +77,8 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    private void ShowSettings()
+    /// <param name="barId">Diese Leiste in den Einstellungen auswählen (Rechtsklick auf eine Leiste); null = unverändert.</param>
+    private void ShowSettings(string? barId)
     {
         if (_settings is null) return;
 
@@ -89,6 +90,7 @@ public partial class App : Application
             _settingsWindow.Show(); // nicht modal – die Leiste läuft unabhängig weiter
         }
 
+        if (barId is not null) _settingsWindow.SelectBar(barId);
         if (_settingsWindow.WindowState == WindowState.Minimized)
             _settingsWindow.WindowState = WindowState.Normal;
         _settingsWindow.Activate();

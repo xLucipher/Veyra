@@ -84,6 +84,36 @@
                 </DockPanel>
             </Border>
         </DataTemplate>
+        <!-- Auswahl der bearbeiteten Leiste (Darstellung, Widgets, Monitore) -->
+        <DataTemplate x:Key="BarSelector">
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <DockPanel Style="{StaticResource Row}">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                            <ComboBox ItemsSource="{Binding BarOptions}" DisplayMemberPath="Name" SelectedIndex="{Binding SelectedBarIndex}" Width="200" />
+                            <Button Command="{Binding AddBarCommand}" Margin="10,0,0,0" ToolTip="Neue Leiste hinzufügen">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE710;" Style="{StaticResource Glyph}" FontSize="12" Margin="0,0,8,0" />
+                                    <TextBlock Text="Neue Leiste" />
+                                </StackPanel>
+                            </Button>
+                            <Button Command="{Binding RemoveBarCommand}" IsEnabled="{Binding CanRemoveBar}" Margin="10,0,0,0" ToolTip="Diese Leiste entfernen">
+                                <TextBlock Text="&#xE74D;" Style="{StaticResource Glyph}" FontSize="12" />
+                            </Button>
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Leiste bearbeiten" Style="{StaticResource RowTitle}" />
+                            <TextBlock Text="{Binding BarHintText}" Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </DockPanel>
+                    <Border Style="{StaticResource Divider}" />
+                    <DockPanel Style="{StaticResource Row}">
+                        <TextBox DockPanel.Dock="Right" Width="200" VerticalAlignment="Center" Text="{Binding BarName, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Text="Name" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
     </Window.Resources>
 
     <DockPanel>
@@ -230,6 +260,7 @@
             <ScrollViewer Style="{StaticResource Page}" Visibility="{Binding SelectedIndex, ElementName=Nav, Converter={StaticResource PageVisibility}, ConverterParameter=1}">
                 <StackPanel>
                     <TextBlock Text="Darstellung" Style="{StaticResource PageTitle}" />
+                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource BarSelector}" Focusable="False" />
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <TextBlock Text="Leiste" Style="{StaticResource CardTitle}" />
@@ -244,7 +275,7 @@
                             <Border Style="{StaticResource Divider}" Visibility="{Binding FixedVisibility}" />
                             <DockPanel Style="{StaticResource Row}" Visibility="{Binding FixedVisibility}">
                                 <ComboBox DockPanel.Dock="Right" IsEditable="True" ItemsSource="{Binding HeightPresets}" Width="120" VerticalAlignment="Center"
-                                          Text="{Binding Settings.Appearance.Height, UpdateSourceTrigger=PropertyChanged}" />
+                                          Text="{Binding Bar.Appearance.Height, UpdateSourceTrigger=PropertyChanged}" />
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Höhe (px)" Style="{StaticResource RowTitle}" />
                                     <TextBlock Text="Auswahl oder eigener Wert (16–200). Wird mit der Windows-Skalierung vergrößert." Style="{StaticResource RowHint}" />
@@ -252,7 +283,7 @@
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
                             <DockPanel Style="{StaticResource Row}">
-                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding Settings.Appearance.BackgroundColor, UpdateSourceTrigger=PropertyChanged}" />
+                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding Bar.Appearance.BackgroundColor, UpdateSourceTrigger=PropertyChanged}" />
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Hintergrundfarbe" Style="{StaticResource RowTitle}" />
                                     <TextBlock Text="Farbfeld anklicken für den Farbkreis." Style="{StaticResource RowHint}" />
@@ -261,7 +292,7 @@
                             <Border Style="{StaticResource Divider}" />
                             <DockPanel Style="{StaticResource Row}">
                                 <ComboBox DockPanel.Dock="Right" ItemsSource="{Binding BorderThicknessOptions}" DisplayMemberPath="Display" SelectedValuePath="Value"
-                                          SelectedValue="{Binding Settings.Appearance.BorderThickness}" Width="120" VerticalAlignment="Center" />
+                                          SelectedValue="{Binding Bar.Appearance.BorderThickness}" Width="120" VerticalAlignment="Center" />
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Rahmen" Style="{StaticResource RowTitle}" />
                                     <TextBlock Text="Fixiert: Trennlinie unten. Dynamisch: Rahmen rundherum." Style="{StaticResource RowHint}" />
@@ -269,7 +300,7 @@
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
                             <DockPanel Style="{StaticResource Row}">
-                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding Settings.Appearance.BorderColor, UpdateSourceTrigger=PropertyChanged}" />
+                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding Bar.Appearance.BorderColor, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Rahmenfarbe" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
                             </DockPanel>
                         </StackPanel>
@@ -283,9 +314,9 @@
                                        Text="Verschieben: die Leiste an einer freien Stelle oder an der Uhr ziehen. Größe: an den Rändern ziehen oder hier eingeben. Position und Größe werden automatisch gespeichert." />
                             <DockPanel Style="{StaticResource Row}">
                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBox Width="90" Text="{Binding Settings.Appearance.Width, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBox Width="90" Text="{Binding Bar.Appearance.Width, UpdateSourceTrigger=PropertyChanged}" />
                                     <TextBlock Text="×" VerticalAlignment="Center" Margin="10,0" Opacity="0.7" />
-                                    <TextBox Width="90" Text="{Binding Settings.Appearance.FloatingHeight, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBox Width="90" Text="{Binding Bar.Appearance.FloatingHeight, UpdateSourceTrigger=PropertyChanged}" />
                                 </StackPanel>
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Größe – Breite × Höhe (px)" Style="{StaticResource RowTitle}" />
@@ -296,10 +327,10 @@
                             <DockPanel Style="{StaticResource Row}">
                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBox Width="90" ToolTip="Abstand vom linken Monitorrand; leer = zentriert"
-                                             Text="{Binding Settings.Appearance.FloatingLeft, UpdateSourceTrigger=PropertyChanged, TargetNullValue=''}" />
+                                             Text="{Binding Bar.Appearance.FloatingLeft, UpdateSourceTrigger=PropertyChanged, TargetNullValue=''}" />
                                     <TextBlock Text="/" VerticalAlignment="Center" Margin="10,0" Opacity="0.7" />
                                     <TextBox Width="90" ToolTip="Abstand vom oberen Monitorrand"
-                                             Text="{Binding Settings.Appearance.FloatingTop, UpdateSourceTrigger=PropertyChanged, TargetNullValue=''}" />
+                                             Text="{Binding Bar.Appearance.FloatingTop, UpdateSourceTrigger=PropertyChanged, TargetNullValue=''}" />
                                     <Button Content="Zentrieren" Command="{Binding CenterHorizontallyCommand}" Margin="10,0,0,0" />
                                 </StackPanel>
                                 <StackPanel VerticalAlignment="Center">
@@ -310,7 +341,7 @@
                             <Border Style="{StaticResource Divider}" />
                             <DockPanel Style="{StaticResource Row}">
                                 <ComboBox DockPanel.Dock="Right" ItemsSource="{Binding LayerOptions}" DisplayMemberPath="Display" SelectedValuePath="Value"
-                                          SelectedValue="{Binding Settings.Appearance.Layer}" Width="300" VerticalAlignment="Center" />
+                                          SelectedValue="{Binding Bar.Appearance.Layer}" Width="300" VerticalAlignment="Center" />
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Ebene" Style="{StaticResource RowTitle}" />
                                     <TextBlock Text="„Im Hintergrund“ liegt hinter allen Fenstern – wie ein Widget auf dem Desktop." Style="{StaticResource RowHint}" />
@@ -318,7 +349,7 @@
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
                             <DockPanel Style="{StaticResource Row}">
-                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Settings.Appearance.LockPosition}" VerticalAlignment="Center" />
+                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Bar.Appearance.LockPosition}" VerticalAlignment="Center" />
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Position sperren" Style="{StaticResource RowTitle}" />
                                     <TextBlock Text="Verhindert versehentliches Verschieben und Größenändern. Auch per Rechtsklick auf die Leiste umschaltbar." Style="{StaticResource RowHint}" />
@@ -329,7 +360,7 @@
                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                                     <Slider x:Name="OpacitySlider" Width="220" Minimum="0" Maximum="1" SmallChange="0.05" LargeChange="0.1"
                                             IsSnapToTickEnabled="True" TickFrequency="0.05"
-                                            Value="{Binding Settings.Appearance.BackgroundOpacity}" VerticalAlignment="Center" />
+                                            Value="{Binding Bar.Appearance.BackgroundOpacity}" VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding Value, ElementName=OpacitySlider, StringFormat={}{0:P0}}" Width="48" TextAlignment="Right"
                                                VerticalAlignment="Center" Margin="10,0,0,0" />
                                 </StackPanel>
@@ -341,7 +372,7 @@
                             <Border Style="{StaticResource Divider}" />
                             <DockPanel Style="{StaticResource Row}">
                                 <ComboBox DockPanel.Dock="Right" IsEditable="True" ItemsSource="{Binding CornerRadiusPresets}" Width="120" VerticalAlignment="Center"
-                                          Text="{Binding Settings.Appearance.CornerRadius, UpdateSourceTrigger=PropertyChanged}" />
+                                          Text="{Binding Bar.Appearance.CornerRadius, UpdateSourceTrigger=PropertyChanged}" />
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Eckenradius (px)" Style="{StaticResource RowTitle}" />
                                     <TextBlock Text="0 = eckig. Halbe Höhe = Pillenform, bei quadratischer Größe ein Kreis." Style="{StaticResource RowHint}" />
@@ -362,7 +393,7 @@
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
                             <DockPanel Style="{StaticResource Row}">
-                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding Settings.Appearance.ForegroundColor, UpdateSourceTrigger=PropertyChanged}" />
+                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding Bar.Appearance.ForegroundColor, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Schriftfarbe" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
                             </DockPanel>
                         </StackPanel>
@@ -474,6 +505,7 @@
             <ScrollViewer Style="{StaticResource Page}" Visibility="{Binding SelectedIndex, ElementName=Nav, Converter={StaticResource PageVisibility}, ConverterParameter=3}">
                 <StackPanel>
                     <TextBlock Text="Widgets" Style="{StaticResource PageTitle}" />
+                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource BarSelector}" Focusable="False" />
                     <Border Style="{StaticResource Card}">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Left" Text="&#xE759;" Style="{StaticResource Glyph}" FontSize="20" Margin="0,0,14,0" />
@@ -485,7 +517,7 @@
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <DockPanel Style="{StaticResource Row}">
-                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Settings.Appearance.FreeWidgetPlacement}" VerticalAlignment="Center" />
+                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Bar.Appearance.FreeWidgetPlacement}" VerticalAlignment="Center" />
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Freie Platzierung" Style="{StaticResource RowTitle}" />
                                     <TextBlock Style="{StaticResource RowHint}" TextWrapping="Wrap"
@@ -522,6 +554,20 @@
                                                 <TextBlock Text="{Binding Info.Description}" Style="{StaticResource RowHint}" />
                                             </StackPanel>
                                         </DockPanel>
+
+                                        <!-- Alle Widgets: Größe -->
+                                        <StackPanel Margin="40,6,0,0">
+                                            <Border Style="{StaticResource Divider}" />
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <ComboBox DockPanel.Dock="Right" IsEditable="True" Width="140" VerticalAlignment="Center"
+                                                          ItemsSource="{Binding DataContext.ScalePresets, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          Text="{Binding ScalePercent, UpdateSourceTrigger=PropertyChanged}" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Größe (%)" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="100 = normal. Vergrößert Schrift, Symbole und Abstände – z. B. für große dynamische Leisten." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </StackPanel>
 
                                         <!-- Feste Widgets: Bereich und Abstände -->
                                         <StackPanel Visibility="{Binding FixedVisibility}" Margin="40,6,0,0">
@@ -744,6 +790,7 @@
             <ScrollViewer Style="{StaticResource Page}" Visibility="{Binding SelectedIndex, ElementName=Nav, Converter={StaticResource PageVisibility}, ConverterParameter=6}">
                 <StackPanel>
                     <TextBlock Text="Monitore" Style="{StaticResource PageTitle}" />
+                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource BarSelector}" Focusable="False" />
                     <Border Style="{StaticResource Card}">
                         <DockPanel Style="{StaticResource Row}">
                             <ComboBox DockPanel.Dock="Right" ItemsSource="{Binding MonitorOptions}" DisplayMemberPath="Display" SelectedValuePath="Value"

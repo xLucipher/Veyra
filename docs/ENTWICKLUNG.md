@@ -37,7 +37,8 @@ Danach `publish\Veyra.exe` starten. In Visual Studio einfach `Veyra.sln` öffnen
 src/Veyra/
 ├─ App.xaml(.cs)              Einstieg: Einzelinstanz, Logging, Konfiguration, Fehlerbehandlung
 ├─ Bar/                       Taskleistenfenster und UI
-│  ├─ BarManager.cs           Lebenszyklus: Fenster/Widgets erzeugen, positionieren, Systemereignisse, Ein-/Ausblenden
+│  ├─ BarManager.cs           alle Leisten: je Eintrag in `Bars` ein BarController, Hinzufügen/Entfernen zur Laufzeit
+│  ├─ BarController.cs        eine Leiste: Fenster/Widgets erzeugen, positionieren, Systemereignisse, eigene Vollbild-Erkennung
 │  ├─ TopBarWindow.xaml(.cs)  WPF-Fenster + Win32-Belange (Stile, WndProc, SetWindowPos)
 │  ├─ TopBarViewModel.cs      Darstellung und Kontextmenü-Befehle
 │  ├─ BarLayoutPanel.cs       Widget-Layout: feste Bereiche, kollisionsfreie freie Widgets, Drag & Drop
@@ -168,11 +169,16 @@ Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwe
 
 **Einstellungsfenster:** dunkles Fluent-Design (WPF-`ThemeMode="Dark"`, in .NET enthalten – keine Zusatzpakete). Formate, Sprache, Schriftart/-gewicht, Verzögerungen und Monitor werden per Dropdown mit Live-Vorschau gewählt; Farben über eine Palette mit Farbfeldern oder als eigener Hex-Wert; Größen per Auswahl oder eigenem Wert; Vollbild-Ausnahmen aus der Liste laufender Programme.
 
+**Ältere Dateien** (eine Leiste mit `Appearance`, `Widgets` und `System.MonitorSelection` auf oberster Ebene) werden beim Laden automatisch in `Bars[0]` übernommen und im neuen Format gespeichert.
+
 **Fehlerhafte Datei:** Beim Start wird sie als `settings.json.invalid-<Zeitstempel>` gesichert und durch Standardwerte ersetzt; im laufenden Betrieb bleiben die bisherigen Einstellungen aktiv (Warnung im Log). Ungültige Einzelwerte (Farben, Formate, Bereiche) werden auf Standard bzw. Grenzwerte korrigiert.
 
 | Bereich | Schlüssel | Standard | Bedeutung |
 |---|---|---|---|
-| Appearance | `Mode` | `FullWidth` | `FullWidth` = fixiert (oben, volle Breite) · `Floating` = dynamisch (frei beweglich) |
+| Bars[] | `Id`, `Name` | *(automatisch)*, `Leiste N` | eine Leiste = ein eigenes Fenster; es gibt immer mindestens eine |
+| | `MonitorSelection` | `Primary` | oder Gerätename, z. B. `\\.\DISPLAY2` (siehe Einstellungen → Monitore) |
+| | `Widgets` | Uhr + Audio | Widgets dieser Leiste (Typ, Bereich, Positionen, Geräte) |
+| Bars[].Appearance | `Mode` | `FullWidth` | `FullWidth` = fixiert (oben, volle Breite) · `Floating` = dynamisch (frei beweglich) |
 | | `Height` | `48` | Höhe in geräteunabhängigen Pixeln (×1,5 bei 150 % Skalierung) |
 | | `BackgroundColor` | `#202127` | `#RGB`, `#RRGGBB`, `#AARRGGBB` |
 | | `ForegroundColor` / `FontFamily` | `#FFFFFF` / `Segoe UI` | Standard für alle Widgets |
@@ -184,7 +190,7 @@ Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwe
 | | `FreeWidgetPlacement` | `false` | Widgets (auch die Uhr) frei in beide Richtungen platzieren; Positionen je Widget in `FreeX`/`FreeY` (Anteil von Breite/Höhe, null = normale Anordnung) |
 | | `BackgroundOpacity` / `CornerRadius` | `1` / `12` | dynamisch: Deckkraft 0–1 (0 = durchsichtig, Klicks gehen durch) und Eckenradius |
 | Behavior | `AlwaysOnTop` | `true` | |
-| | `ReserveScreenSpace` | `false` | `true` = AppBar (maximierte Fenster beginnen unter der Leiste), `false` = Overlay |
+| | `ReserveScreenSpace` | `true` | `true` = AppBar (maximierte Fenster beginnen unter der Leiste), `false` = Overlay |
 | | `AutoHide`, `AutoHideDelayMs` | `false`, `400` | *geplant, in V1 ohne Wirkung* |
 | | `HideOnFullscreen` | `true` | bei exklusivem Vollbild ausblenden |
 | | `HideOnBorderlessFullscreen` | `true` | bei randlosem Vollbild ausblenden |
@@ -200,7 +206,6 @@ Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwe
 | | `DateFontSize`, `DateFontColor` | `11`, `#B4B7C2` | |
 | | `Culture` | *(leer = System)* | z. B. `de-DE` |
 | System | `StartWithWindows` | `false` | HKCU-Run-Eintrag, ohne Adminrechte |
-| | `MonitorSelection` | `Primary` | oder Gerätename, z. B. `\\.\DISPLAY2` (siehe Einstellungen → Monitore) |
 | | `EnableLogging` | `true` | Info-/Diagnose-Log; Fehler werden immer protokolliert |
 | | `UseSoftwareRendering` | `true` | keine GPU-Nutzung; wirkt nach Neustart |
 
@@ -225,5 +230,4 @@ Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwe
 
 - **Dynamischer Modus:** optional Mica/Acrylic-Hintergrund über `DWMWA_SYSTEMBACKDROP_TYPE`, Einrasten an Bildschirmrändern.
 - **Auto-Hide:** Leiste außerhalb des sichtbaren Bereichs parken, Einblenden über einen 1-px-Auslöserstreifen am oberen Rand; während Vollbild deaktiviert.
-- **Mehrere Leisten:** `BarManager` je Monitor instanziieren (Detektor und Fenster sind bereits monitorbezogen).
-- **Weitere Widgets:** `IBarWidget` implementieren, Typ in `WidgetType`/`WidgetCatalog` eintragen und in `BarManager.CreateWidgets` erzeugen; fest oder frei legt `WidgetEntry.IsFixedType` fest. Kandidaten: CPU/RAM (PerformanceCounter-freie `GetSystemTimes`/`GlobalMemoryStatusEx`), Lautstärke (Core Audio), Medien (`GlobalSystemMediaTransportControlsSessionManager`), virtuelle Desktops.
+- **Weitere Widgets:** `IBarWidget` implementieren, Typ in `WidgetType`/`WidgetCatalog` eintragen und in `BarController.CreateWidgets` erzeugen; fest oder frei legt `WidgetEntry.IsFixedType` fest. Kandidaten: CPU/RAM (PerformanceCounter-freie `GetSystemTimes`/`GlobalMemoryStatusEx`), Lautstärke (Core Audio), Medien (`GlobalSystemMediaTransportControlsSessionManager`), virtuelle Desktops.

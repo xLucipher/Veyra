@@ -57,9 +57,9 @@ public sealed class TopBarViewModel : ObservableObject
     public string LockMenuText => _isLocked ? "Position entsperren" : "Position sperren";
     public string LockMenuGlyph => _isLocked ? "" : "";
 
-    public void Apply(AppSettings settings)
+    public void Apply(BarSettings bar)
     {
-        var a = settings.Appearance;
+        var a = bar.Appearance;
         var background = ColorUtil.ToBrush(a.BackgroundColor, Color.FromRgb(0x20, 0x21, 0x27));
         var border = ColorUtil.ToBrush(a.BorderColor, Colors.Transparent);
 
