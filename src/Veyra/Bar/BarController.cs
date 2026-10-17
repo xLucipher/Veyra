@@ -73,6 +73,8 @@ public sealed class BarController : IDisposable
     {
         _detector.StateChanged += (_, _) => ApplyVisibility();
         _detector.ForegroundChanged += (_, _) => KeepOnTop();
+        // Sofort prüfen, nicht gebündelt: Jede Verzögerung wäre als kurzes Aufblitzen der Taskleiste sichtbar.
+        _detector.ZOrderChanged += (_, _) => StayAboveTaskbar();
 
         BuildBar();
         _detector.Start();
@@ -381,14 +383,28 @@ public sealed class BarController : IDisposable
 
     private void KeepOnTop()
     {
-        if (_window is null || _hiddenForFullscreen) return;
+        if (ShouldStayOnTop()) _window!.EnsureTopmost();
+    }
+
+    /// <summary>
+    /// Die Windows-Taskleiste holt sich beim Anklicken selbst nach vorne, und zwar erst nach dem Vordergrundwechsel.
+    /// Eine Leiste im Vordergrund, die über der Taskleiste liegt, würde dann verschwinden → wieder darüber legen.
+    /// </summary>
+    private void StayAboveTaskbar()
+    {
+        if (ShouldStayOnTop() && _window!.IsVisible && _window.IsBelowTaskbar()) _window.EnsureTopmost();
+    }
+
+    /// <summary>Leiste sichtbar und im Vordergrund gewünscht (fixiert: "Immer im Vordergrund", dynamisch: Ebene Vordergrund).</summary>
+    private bool ShouldStayOnTop()
+    {
+        if (_window is null || _hiddenForFullscreen) return false;
         var settings = _settings.Current;
         var bar = Bar(settings);
-        if (bar is null) return;
-        bool topmost = _window.IsDynamic
+        if (bar is null) return false;
+        return _window.IsDynamic
             ? bar.Appearance.Layer == WindowLayer.Topmost
             : settings.Behavior.AlwaysOnTop;
-        if (topmost) _window.EnsureTopmost();
     }
 
     /// <summary>Bildschirmbereich reservieren gibt es nur im fixierten Modus.</summary>

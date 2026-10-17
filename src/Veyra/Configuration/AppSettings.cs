@@ -210,6 +210,12 @@ public sealed class WidgetEntry
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? LabelColor { get; set; }
 
+    /// <summary>Nur Audio-Widgets: Farbe des Strichs unter dem Standardgerät. null = <see cref="DefaultIndicatorColor"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? IndicatorColor { get; set; }
+
+    public const string DefaultIndicatorColor = "#3DAEE9";
+
     /// <summary>Nur Uhren: Format, Schrift und Farben – jede Uhr hat eigene Werte.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ClockSettings? Clock { get; set; }
@@ -245,6 +251,7 @@ public sealed class WidgetEntry
         }
         IconColor = ColorUtil.IsValid(IconColor) ? IconColor!.Trim() : null;
         LabelColor = ColorUtil.IsValid(LabelColor) ? LabelColor!.Trim() : null;
+        IndicatorColor = ColorUtil.IsValid(IndicatorColor) ? IndicatorColor!.Trim() : null;
         if (!Enum.IsDefined(Slot)) Slot = WidgetSlot.Center;
         OuterMargin = double.IsFinite(OuterMargin) ? Math.Clamp(OuterMargin, 0, 500) : 12;
         InnerSpacing = double.IsFinite(InnerSpacing) ? Math.Clamp(InnerSpacing, 0, 200) : 16;

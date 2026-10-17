@@ -10,11 +10,11 @@
 ## Funktionen
 
 - **Digitaluhr** exakt in der Bildschirmmitte, wahlweise mit Datum und Kalenderwoche. Ein Klick öffnet den Monatskalender. Mehrere Uhren lassen sich unabhängig voneinander gestalten (Format, Schrift, Farben, Sprache).
-- **Audio-Schnellwechsel:** Buttons für Wiedergabegeräte und Mikrofone. Ein Klick macht das Gerät zum Standard, das aktive ist markiert. Pro Gerät lassen sich Symbol und Kurzname wählen, pro Widget die Farbe von Symbolen und Namen.
+- **Audio-Schnellwechsel:** Buttons für Wiedergabegeräte und Mikrofone. Ein Klick macht das Gerät zum Standard, das aktive ist markiert. Pro Gerät lassen sich Symbol und Kurzname wählen, pro Widget die Farbe von Symbolen, Namen und der Markierung des aktiven Geräts.
 - **Widgets frei anordnen:** Die Uhr hat feste Positionen (links, Mitte, rechts). Alle anderen Widgets verschiebst du per Drag & Drop direkt auf der Leiste, ohne dass sie sich überlappen. Mit der **freien Platzierung** lassen sich alle Widgets, auch die Uhr, beliebig auf der Leiste ablegen, auch übereinander oder in die Ecken.
 - **Automatisch ausgeblendet bei Vollbild:** bei Spielen (exklusiv und randlos), Videos und Browser-Vollbild. Danach erscheint die Leiste wieder.
 - **Gaming-freundlich:** praktisch keine CPU-Last im Leerlauf, keine GPU-Nutzung, kein Fokusdiebstahl und kein Eintrag in Alt+Tab.
-- **Fixiert oder dynamisch:** oben über die volle Breite angedockt – oder als frei bewegliches Fenster mit eigener Größe, Transparenz, abgerundeten Ecken und wählbarer Ebene (z. B. als durchsichtige Uhr im Hintergrund des Desktops).
+- **Fixiert oder dynamisch:** oben über die volle Breite angedockt – oder als frei bewegliches Fenster mit eigener Größe, Transparenz, abgerundeten Ecken und wählbarer Ebene (z. B. als durchsichtige Uhr im Hintergrund des Desktops). Leisten im Vordergrund bleiben auch über der Windows-Taskleiste.
 - **Mehrere Leisten:** beliebig viele Leisten, jede mit eigener Darstellung, Ebene, Monitor und eigenen Widgets – z. B. eine durchsichtige Uhr auf dem Desktop und eine Audio-Leiste immer im Vordergrund.
 - **Anpassbar:** Farben (inklusive Farbkreis), Schriften, Höhe, Formate, Monitor und optional ein reservierter Bildschirmbereich. Änderungen wirken sofort.
 - **Automatische Updates** über GitHub, mit Rückfrage.

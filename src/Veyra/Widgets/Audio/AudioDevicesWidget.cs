@@ -31,6 +31,7 @@ public sealed class AudioDevicesWidget : ObservableObject, IBarWidget
     private bool _running;
     private Brush _foreground = Brushes.White;
     private Brush _iconForeground = Brushes.White;
+    private Brush _indicatorForeground = ColorUtil.ToBrush(WidgetEntry.DefaultIndicatorColor, Colors.DeepSkyBlue);
     private FontFamily _fontFamily = new("Segoe UI");
 
     private readonly string _entryId;
@@ -55,6 +56,9 @@ public sealed class AudioDevicesWidget : ObservableObject, IBarWidget
     /// <summary>Farbe der Symbole.</summary>
     public Brush IconForeground { get => _iconForeground; private set => SetProperty(ref _iconForeground, value); }
 
+    /// <summary>Farbe des Strichs unter dem Standardgerät.</summary>
+    public Brush IndicatorForeground { get => _indicatorForeground; private set => SetProperty(ref _indicatorForeground, value); }
+
     public FontFamily FontFamily { get => _fontFamily; private set => SetProperty(ref _fontFamily, value); }
 
     public void ApplySettings(AppSettings settings, BarSettings bar)
@@ -67,6 +71,7 @@ public sealed class AudioDevicesWidget : ObservableObject, IBarWidget
         var barForeground = ColorUtil.ToBrush(bar.Appearance.ForegroundColor, Colors.White);
         Foreground = entry?.LabelColor is { } labelColor ? ColorUtil.ToBrush(labelColor, Colors.White) : barForeground;
         IconForeground = entry?.IconColor is { } iconColor ? ColorUtil.ToBrush(iconColor, Colors.White) : barForeground;
+        IndicatorForeground = ColorUtil.ToBrush(entry?.IndicatorColor ?? WidgetEntry.DefaultIndicatorColor, Colors.DeepSkyBlue);
         FontFamily = new FontFamily(bar.Appearance.FontFamily);
         if (_running) Rebuild();
     }

@@ -104,6 +104,9 @@ public sealed class FullscreenDetector : IDisposable
 
     public event EventHandler? ForegroundChanged;
 
+    /// <summary>Die Z-Reihenfolge der Hauptfenster hat sich geändert (z. B. Taskleiste hat sich nach vorne geholt).</summary>
+    public event EventHandler? ZOrderChanged;
+
     public void Configure(BehaviorSettings behavior)
     {
         _excludedProcesses = new HashSet<string>(behavior.FullscreenExcludedProcesses, StringComparer.OrdinalIgnoreCase);
@@ -130,6 +133,12 @@ public sealed class FullscreenDetector : IDisposable
         }));
         _hooks.Add(new WinEventHook(EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZEEND, (_, _, _, _) => RequestEvaluation()));
         _hooks.Add(new WinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, (_, _, _, _) => RequestEvaluation()));
+        // Z-Order-Änderungen von Hauptfenstern meldet Windows am Desktop-Fenster; Änderungen innerhalb von Fenstern ignorieren.
+        var desktop = GetDesktopWindow();
+        _hooks.Add(new WinEventHook(EVENT_OBJECT_REORDER, EVENT_OBJECT_REORDER, (_, hwnd, _, _) =>
+        {
+            if (hwnd == desktop) ZOrderChanged?.Invoke(this, EventArgs.Empty);
+        }));
 
         if (_safetyTimer.Interval > TimeSpan.Zero) _safetyTimer.Start();
         EvaluateNow();

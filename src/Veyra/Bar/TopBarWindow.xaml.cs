@@ -126,6 +126,22 @@ public partial class TopBarWindow : Window
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
     }
 
+    /// <summary>
+    /// True, wenn eine Windows-Taskleiste in der Z-Reihenfolge über der Leiste liegt. Sie holt sich z. B. beim
+    /// Anklicken selbst nach vorne – erst nach dem Vordergrundwechsel, auf den die Leiste bereits reagiert hat.
+    /// </summary>
+    public bool IsBelowTaskbar()
+    {
+        if (Handle == IntPtr.Zero) return false;
+        // Nur die Fenster oberhalb der Leiste durchgehen – bei einer Topmost-Leiste sind das wenige.
+        for (IntPtr hwnd = NativeMethods.GetWindow(Handle, GW_HWNDPREV); hwnd != IntPtr.Zero; hwnd = NativeMethods.GetWindow(hwnd, GW_HWNDPREV))
+        {
+            if (!IsWindowVisible(hwnd)) continue;
+            if (Fullscreen.WindowInspector.GetClassName(hwnd) is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd") return true;
+        }
+        return false;
+    }
+
     /// <summary>Setzt die Z-Ebene laut <see cref="Layer"/> (dynamischer Modus).</summary>
     public void ApplyLayer()
     {

@@ -15,7 +15,8 @@
                             <Border x:Name="Bg" CornerRadius="6" Background="Transparent" Padding="8,5" Margin="1,0">
                                 <ContentPresenter VerticalAlignment="Center" />
                             </Border>
-                            <Border x:Name="Accent" Height="2" Width="14" CornerRadius="1" Background="#3DAEE9"
+                            <Border x:Name="Accent" Height="2" Width="14" CornerRadius="1"
+                                    Background="{Binding DataContext.IndicatorForeground, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                     VerticalAlignment="Bottom" Margin="0,0,0,1" Visibility="Collapsed" />
                         </Grid>
                         <ControlTemplate.Triggers>

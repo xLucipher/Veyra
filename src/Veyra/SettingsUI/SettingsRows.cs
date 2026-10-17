@@ -67,6 +67,8 @@ public sealed class WidgetRowViewModel : ObservableObject
     private string _labelColor;
     private bool _iconColorCustom;
     private bool _labelColorCustom;
+    private string _indicatorColor;
+    private bool _indicatorColorCustom;
 
     /// <param name="barForeground">Schriftfarbe der Leiste – gilt, solange das Widget keine eigene Farbe hat.</param>
     /// <param name="editClock">Öffnet die Seite "Uhr &amp; Kalender" mit dieser Uhr.</param>
@@ -87,6 +89,8 @@ public sealed class WidgetRowViewModel : ObservableObject
         _labelColorCustom = entry.LabelColor is not null;
         _iconColor = entry.IconColor ?? barForeground;
         _labelColor = entry.LabelColor ?? barForeground;
+        _indicatorColorCustom = entry.IndicatorColor is not null;
+        _indicatorColor = entry.IndicatorColor ?? WidgetEntry.DefaultIndicatorColor;
         // Eigene Kopie: Änderungen auf der Seite "Uhr & Kalender" wirken erst beim Übernehmen.
         Clock = entry.Clock?.Clone() ?? new ClockSettings();
         RemoveCommand = new RelayCommand(() => remove(this));
@@ -95,8 +99,10 @@ public sealed class WidgetRowViewModel : ObservableObject
         {
             IconColor = _barForeground;
             LabelColor = _barForeground;
+            IndicatorColor = WidgetEntry.DefaultIndicatorColor;
             _iconColorCustom = false;
             _labelColorCustom = false;
+            _indicatorColorCustom = false;
         });
 
         if (IsAudio)
@@ -160,6 +166,16 @@ public sealed class WidgetRowViewModel : ObservableObject
         }
     }
 
+    /// <summary>Nur Audio-Widgets: Farbe des Strichs unter dem Standardgerät.</summary>
+    public string IndicatorColor
+    {
+        get => _indicatorColor;
+        set
+        {
+            if (SetProperty(ref _indicatorColor, value ?? "")) _indicatorColorCustom = true;
+        }
+    }
+
     public bool Enabled { get => _enabled; set => SetProperty(ref _enabled, value); }
 
     public WidgetSlot Slot
@@ -214,6 +230,7 @@ public sealed class WidgetRowViewModel : ObservableObject
         // Ohne eigene Farbe (null) folgt das Widget der Schriftfarbe der Leiste.
         IconColor = IsAudio && _iconColorCustom ? IconColor : null,
         LabelColor = IsAudio && _labelColorCustom ? LabelColor : null,
+        IndicatorColor = IsAudio && _indicatorColorCustom ? IndicatorColor : null,
         Clock = IsClock ? Clock.Clone() : null,
     };
 }

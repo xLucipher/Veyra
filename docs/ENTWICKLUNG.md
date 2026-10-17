@@ -177,7 +177,7 @@ Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwe
 |---|---|---|---|
 | Bars[] | `Id`, `Name` | *(automatisch)*, `Leiste N` | eine Leiste = ein eigenes Fenster; es gibt immer mindestens eine |
 | | `MonitorSelection` | `Primary` | oder Gerätename, z. B. `\\.\DISPLAY2` (siehe Einstellungen → Monitore) |
-| | `Widgets` | Uhr + Audio | Widgets dieser Leiste (Typ, Bereich, Positionen, Geräte); Uhren mit eigenem `Clock`, Audio-Widgets mit `IconColor`/`LabelColor` (leer = `ForegroundColor` der Leiste) |
+| | `Widgets` | Uhr + Audio | Widgets dieser Leiste (Typ, Bereich, Positionen, Geräte); Uhren mit eigenem `Clock`, Audio-Widgets mit `IconColor`/`LabelColor` (leer = `ForegroundColor` der Leiste) und `IndicatorColor` (Strich unter dem Standardgerät, leer = `#3DAEE9`) |
 | Bars[].Appearance | `Mode` | `FullWidth` | `FullWidth` = fixiert (oben, volle Breite) · `Floating` = dynamisch (frei beweglich) |
 | | `Height` | `48` | Höhe in geräteunabhängigen Pixeln (×1,5 bei 150 % Skalierung) |
 | | `BackgroundColor` | `#202127` | `#RGB`, `#RRGGBB`, `#AARRGGBB` |

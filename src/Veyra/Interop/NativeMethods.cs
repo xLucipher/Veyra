@@ -32,6 +32,7 @@ internal static class NativeMethods
     public const uint SWP_NOOWNERZORDER = 0x0200;
 
     public const uint GW_HWNDNEXT = 2;
+    public const uint GW_HWNDPREV = 3;
 
     // ---- Fensternachrichten ---------------------------------------------------------------
     public const int WM_ACTIVATE = 0x0006;
@@ -61,6 +62,7 @@ internal static class NativeMethods
     public const uint EVENT_SYSTEM_MOVESIZEEND = 0x000B;
     public const uint EVENT_SYSTEM_MINIMIZESTART = 0x0016;
     public const uint EVENT_SYSTEM_MINIMIZEEND = 0x0017;
+    public const uint EVENT_OBJECT_REORDER = 0x8004;
     public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
 
     // ---- Monitore / DPI -------------------------------------------------------------------
@@ -210,6 +212,9 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetDesktopWindow();
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern unsafe int GetClassNameW(IntPtr hWnd, char* lpClassName, int nMaxCount);

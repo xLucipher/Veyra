@@ -658,10 +658,17 @@
                                                 </StackPanel>
                                             </DockPanel>
                                             <DockPanel Style="{StaticResource Row}">
+                                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding IndicatorColor, UpdateSourceTrigger=PropertyChanged}" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Markierungsfarbe" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Strich unter dem aktiven Standardgerät." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
                                                 <Button DockPanel.Dock="Right" Content="Zurücksetzen" Command="{Binding ResetColorsCommand}" VerticalAlignment="Center" />
                                                 <StackPanel VerticalAlignment="Center">
                                                     <TextBlock Text="Farben der Leiste verwenden" Style="{StaticResource RowTitle}" />
-                                                    <TextBlock Text="Ohne eigene Farbe folgt das Widget der Schriftfarbe unter „Darstellung“." Style="{StaticResource RowHint}" />
+                                                    <TextBlock Text="Ohne eigene Farbe folgt das Widget der Schriftfarbe unter „Darstellung“; die Markierung wird wieder blau." Style="{StaticResource RowHint}" />
                                                 </StackPanel>
                                             </DockPanel>
                                             <Border Style="{StaticResource Divider}" />
