@@ -1,8 +1,20 @@
-# CustomTopBar
+<p align="center"><img src="assets/branding/logo_name_banner.png" alt="Veyra" width="520"></p>
 
-Eine ressourcenschonende, konfigurierbare **Zusatz-Taskleiste am oberen Bildschirmrand** für Windows 11 – inspiriert von KDE-Plasma-Panels. Sie ergänzt die Windows-Taskleiste, ohne sie zu verändern.
+# Veyra
+
+Eine ressourcenschonende, konfigurierbare **Zusatz-Taskleiste am oberen Bildschirmrand** für Windows 11. Sie ergänzt die Windows-Taskleiste, ohne sie zu verändern.
 
 **Version 1:** dunkle, durchgehende Leiste mit exakt zentrierter Digitaluhr, zuverlässiger Vollbild-Erkennung (exklusiv **und** randlos), JSON-Konfiguration mit Live-Übernahme, Einstellungsfenster, optionaler AppBar-Reservierung und Logging.
+
+---
+
+## Installation
+
+1. Unter [Releases](https://github.com/xLucipher/Veyra/releases) die neueste `Veyra-Setup-<Version>.exe` herunterladen und starten.
+2. Der Assistent prüft, ob die **Microsoft .NET 10 Desktop Runtime** installiert ist. Fehlt sie, erklärt er das und bietet an, sie direkt von Microsoft herunterzuladen und zu installieren. Das passiert nur mit deiner Zustimmung, Windows fragt dabei einmal per Benutzerkontensteuerung. Danach geht die Installation normal weiter. Alternativ kannst du überspringen und die Runtime später selbst installieren.
+3. Veyra wird **ohne Administratorrechte** nach `%LocalAppData%\Programs\Veyra` installiert, mit Startmenü-Eintrag und optional Autostart und Desktop-Verknüpfung. Am Ende kann Veyra direkt gestartet werden.
+
+Updates kommen danach automatisch über die eingebaute Update-Prüfung (siehe [Updates](#updates)). Die Deinstallation erfolgt über *Windows-Einstellungen → Apps*: Sie beendet Veyra, entfernt den Autostart und fragt, ob deine Einstellungen erhalten bleiben sollen.
 
 ---
 
@@ -11,36 +23,36 @@ Eine ressourcenschonende, konfigurierbare **Zusatz-Taskleiste am oberen Bildschi
 **Voraussetzungen:** Windows 10/11 x64, [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (zum Ausführen genügt die .NET 10 Desktop Runtime). Keine Administratorrechte, keine externen NuGet-Pakete.
 
 ```bash
-dotnet build CustomTopBar.sln -c Release
+dotnet build Veyra.sln -c Release
 ```
 
 ```bash
-dotnet run --project src/CustomTopBar -c Release
+dotnet run --project src/Veyra -c Release
 ```
 
 Eigenständige Ausgabe in einen Ordner (z. B. für den Autostart):
 
 ```bash
-dotnet publish src/CustomTopBar -c Release -r win-x64 --self-contained false -o publish
+dotnet publish src/Veyra -c Release -r win-x64 --self-contained false -o publish
 ```
 
-Danach `publish\CustomTopBar.exe` starten. In Visual Studio einfach `CustomTopBar.sln` öffnen und F5 drücken.
+Danach `publish\Veyra.exe` starten. In Visual Studio einfach `Veyra.sln` öffnen und F5 drücken.
 
 **Bedienung**
 
 | Aktion | Wirkung |
 |---|---|
 | Rechtsklick auf die Leiste | Kontextmenü: *Einstellungen*, *Leiste neu laden*, *Beenden* |
-| `CustomTopBar.exe` erneut starten | öffnet das Einstellungsfenster der laufenden Instanz (es läuft nie mehr als eine Instanz) |
-| `CustomTopBar.exe --exit` | beendet die laufende Instanz sauber, z. B. für Skripte oder vor einem Update |
-| Einstellungen → Allgemein → *CustomTopBar beenden* | beendet die Anwendung auch dann, wenn die Leiste gerade wegen Vollbild ausgeblendet ist |
+| `Veyra.exe` erneut starten | öffnet das Einstellungsfenster der laufenden Instanz (es läuft nie mehr als eine Instanz) |
+| `Veyra.exe --exit` | beendet die laufende Instanz sauber, z. B. für Skripte oder vor einem Update |
+| Einstellungen → Allgemein → *Veyra beenden* | beendet die Anwendung auch dann, wenn die Leiste gerade wegen Vollbild ausgeblendet ist |
 
 ---
 
 ## Architektur
 
 ```
-src/CustomTopBar/
+src/Veyra/
 ├─ App.xaml(.cs)              Einstieg: Einzelinstanz, Logging, Konfiguration, Fehlerbehandlung
 ├─ Bar/                       Taskleistenfenster und UI
 │  ├─ BarManager.cs           Lebenszyklus: Fenster/Widgets erzeugen, positionieren, Systemereignisse, Ein-/Ausblenden
@@ -55,6 +67,7 @@ src/CustomTopBar/
 │  └─ Audio/                  Audiogeräte-Buttons (Wiedergabe/Mikrofon)
 ├─ Audio/                     Core Audio per COM: Geräte auflisten, Standardgerät setzen, Änderungen melden
 ├─ Updates/                   Update-Prüfung über GitHub Releases, Update-Fenster, Installation
+├─ Assets/                    App-Icon und Logo (erzeugt aus assets/branding)
 ├─ Fullscreen/                Vollbild-Erkennung
 │  ├─ FullscreenDetector.cs   Ereignisgesteuerte Heuristik mit Entprellung
 │  └─ WindowInspector.cs      Fenster-Abfragen (Klasse, Prozess, Cloaking, Stile)
@@ -63,6 +76,10 @@ src/CustomTopBar/
 ├─ SettingsUI/                Einstellungsfenster (MVVM), Auswahllisten (SettingsOptions), Farbwähler (ColorField)
 ├─ Interop/                   P/Invoke-Deklarationen, WinEvent-Hook-Wrapper
 └─ Core/                      Logging, Einzelinstanz, MVVM-Basisklassen, Farb-Hilfen
+
+assets/branding/              Original-Logos (logo.png, logo_name.png) und README-Banner
+installer/                    Inno-Setup-Skript (Veyra.iss) und Assistenten-Bilder
+build/                        release.ps1 (Update-Paket, Installer, GitHub-Release), branding.ps1 (Grafiken)
 ```
 
 Bewusst flach gehalten: keine DI-Container, keine Service-Locator, keine Abstraktion ohne zweiten Anwendungsfall. Die einzige Schnittstelle ist `IBarWidget`, weil dort tatsächlich viele Implementierungen folgen.
@@ -137,7 +154,7 @@ Widgets werden unter **Einstellungen → Widgets** hinzugefügt, aktiviert oder 
 
 **Audio-Widgets:** Ein Button je Gerät, das jeweils aktive ist mit einer Akzentlinie markiert. Ein Klick setzt das Gerät als Standard für Medien, Spiele und Kommunikation. Die Geräte kommen aus Windows (Core Audio), deshalb funktioniert das auf jedem Rechner. Neue oder entfernte Geräte und Standardwechsel werden per Ereignis erkannt, ohne Polling. Pro Widget wählst du *alle aktiven Geräte* oder einzelne per Häkchen, z. B. ein Widget je Gerät. Symbol und Kurzname je Gerät stellst du unter **Einstellungen → Audiogeräte** ein.
 
-**Gerätesymbole:** Ein Klick auf die Symbolauswahl öffnet ein Raster mit den Gruppen *Wiedergabe* (Lautsprecher, Regal- und Stereo-Lautsprecher, Soundbar, Soundbar mit Subwoofer, Kopfhörer, Over-Ear, Earbuds, Monitor/TV), *Mikrofone* (Mikrofon, Studio-, Podcast-, USB-Tisch-, Hand- und Ansteckmikrofon, Webcam, Audio-Interface/XLR) und *Allgemein* (Headset, Bluetooth, virtuelles Gerät, Stream/Mix, Lautstärke, Musik, Spiele, Telefon, Laptop). Die eigenen Symbole sind Vektorgrafiken im Linienstil von Segoe Fluent Icons ([AudioIcons.cs](src/CustomTopBar/Audio/AudioIcons.cs)) und brauchen keine Bilddateien. Bei *Automatisch* wird das Symbol zuerst am Gerätenamen erkannt (z. B. „Kopfhörer“, „Soundbar“, „Virtual“/„VB-Audio“, „XLR“/„Focusrite“, „Yeti“/„Wave:“, „Webcam“/„Brio“, „AirPods“/„Buds“), sonst am Formfaktor, den Windows meldet. Zum Setzen des Standardgeräts dient die nicht offiziell dokumentierte, seit Windows 7 stabile Schnittstelle `IPolicyConfig`, die auch die Windows-Soundsteuerung und Tools wie EarTrumpet nutzen.
+**Gerätesymbole:** Ein Klick auf die Symbolauswahl öffnet ein Raster mit den Gruppen *Wiedergabe* (Lautsprecher, Regal- und Stereo-Lautsprecher, Soundbar, Soundbar mit Subwoofer, Kopfhörer, Over-Ear, Earbuds, Monitor/TV), *Mikrofone* (Mikrofon, Studio-, Podcast-, USB-Tisch-, Hand- und Ansteckmikrofon, Webcam, Audio-Interface/XLR) und *Allgemein* (Headset, Bluetooth, virtuelles Gerät, Stream/Mix, Lautstärke, Musik, Spiele, Telefon, Laptop). Die eigenen Symbole sind Vektorgrafiken im Linienstil von Segoe Fluent Icons ([AudioIcons.cs](src/Veyra/Audio/AudioIcons.cs)) und brauchen keine Bilddateien. Bei *Automatisch* wird das Symbol zuerst am Gerätenamen erkannt (z. B. „Kopfhörer“, „Soundbar“, „Virtual“/„VB-Audio“, „XLR“/„Focusrite“, „Yeti“/„Wave:“, „Webcam“/„Brio“, „AirPods“/„Buds“), sonst am Formfaktor, den Windows meldet. Zum Setzen des Standardgeräts dient die nicht offiziell dokumentierte, seit Windows 7 stabile Schnittstelle `IPolicyConfig`, die auch die Windows-Soundsteuerung selbst nutzt.
 
 **Uhr:** Ein Klick öffnet einen Monatskalender direkt unter der Uhr. Ein Klick daneben oder Esc schließt ihn.
 
@@ -153,23 +170,35 @@ Die Leiste aktualisiert sich über **GitHub Releases** dieses Repositorys. Weil 
   - **Später:** Die Leiste fragt frühestens in 24 Stunden wieder.
   - **Nein:** Diese Version wird übersprungen, erst eine neuere wird wieder angeboten.
 - **Einstellungen → Allgemein → Updates:** automatische Prüfung an oder aus, *Jetzt nach Updates suchen* (fragt auch bei übersprungener Version) und die Release-Seite.
-- **Installationsordner:** Er muss ohne Adminrechte beschreibbar sein, z. B. `%LocalAppData%\Programs\CustomTopBar`. Unter „Programme“ verweist das Update-Fenster stattdessen auf die Release-Seite.
-- **Protokoll der Installation:** `%TEMP%\CustomTopBar-update\install-update.log`.
+- **Installationsordner:** Er muss ohne Adminrechte beschreibbar sein, z. B. `%LocalAppData%\Programs\Veyra`. Unter „Programme“ verweist das Update-Fenster stattdessen auf die Release-Seite.
+- **Protokoll der Installation:** `%TEMP%\Veyra-update\install-update.log`.
 
 ### Release veröffentlichen
 
-1. In `src/CustomTopBar/CustomTopBar.csproj` die `<Version>` erhöhen, committen und pushen.
-2. Paket bauen und als GitHub-Release veröffentlichen (Tag `v<Version>`, ZIP als Anhang):
+**Voraussetzung:** [Inno Setup 6](https://jrsoftware.org/isinfo.php) für den Installer, z. B. so installiert:
+
+```bash
+winget install JRSoftware.InnoSetup --scope user
+```
+
+1. In `src/Veyra/Veyra.csproj` die `<Version>` erhöhen, committen und pushen.
+2. Paket und Installer bauen und als GitHub-Release veröffentlichen (Tag `v<Version>`, Setup und ZIP als Anhang):
 
 ```bash
 .\build\release.ps1 -Publish -NotesFile .\notes.md
 ```
 
-Ohne `-Publish` entsteht nur `artifacts\CustomTopBar-<Version>-win-x64.zip` zum Testen. Ohne Notizdatei erzeugt GitHub die Release-Notizen aus den Commits. Das Skript veröffentlicht nur von einem sauberen, gepushten Stand.
+Ohne `-Publish` entstehen nur `artifacts\Veyra-Setup-<Version>.exe` (Installer für Erstinstallationen) und `artifacts\Veyra-<Version>-win-x64.zip` (Paket für die Update-Funktion) zum Testen. Ohne Notizdatei erzeugt GitHub die Release-Notizen aus den Commits. Das Skript veröffentlicht nur von einem sauberen, gepushten Stand.
+
+Der Installer ([installer/Veyra.iss](installer/Veyra.iss)) lässt sich auf einem Rechner mit installierter Runtime mit `Veyra-Setup-<Version>.exe /SIMULATEMISSINGRUNTIME` testen. Dann erscheint die Seite für die fehlende Runtime.
+
+### Logo und Grafiken
+
+Die Original-Logos liegen in [assets/branding](assets/branding) (`logo.png`, `logo_name.png`). Daraus erzeugt [build/branding.ps1](build/branding.ps1) das App-Icon (`src/Veyra/Assets/Veyra.ico`), das Fensterlogo, das README-Banner und die Bilder des Installer-Assistenten. Das Skript muss nur neu laufen, wenn sich die Logos ändern.
 
 ## Konfiguration
 
-Datei: `%AppData%\CustomTopBar\settings.json` – wird beim ersten Start mit Standardwerten angelegt. Kommentare (`//`) und abschließende Kommas sind erlaubt. Änderungen (über das Einstellungsfenster **oder** direkt in der Datei) werden ohne Neustart übernommen.
+Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwerten angelegt. Kommentare (`//`) und abschließende Kommas sind erlaubt. Änderungen (über das Einstellungsfenster **oder** direkt in der Datei) werden ohne Neustart übernommen.
 
 **Einstellungsfenster:** dunkles Fluent-Design (WPF-`ThemeMode="Dark"`, in .NET enthalten – keine Zusatzpakete). Formate, Sprache, Schriftart/-gewicht, Verzögerungen und Monitor werden per Dropdown mit Live-Vorschau gewählt; Farben über eine Palette mit Farbfeldern oder als eigener Hex-Wert; Größen per Auswahl oder eigenem Wert; Vollbild-Ausnahmen aus der Liste laufender Programme.
 
@@ -204,7 +233,7 @@ Datei: `%AppData%\CustomTopBar\settings.json` – wird beim ersten Start mit Sta
 | | `EnableLogging` | `true` | Info-/Diagnose-Log; Fehler werden immer protokolliert |
 | | `UseSoftwareRendering` | `true` | keine GPU-Nutzung; wirkt nach Neustart |
 
-**Logs:** `%AppData%\CustomTopBar\logs\topbar-JJJJMMTT.log` (7 Tage Aufbewahrung, max. 20 MB pro Tag). Vollbild-Übergänge werden mit Fensterklasse, Prozess und Rechteck protokolliert – ideal zum Pflegen der Ausnahmelisten.
+**Logs:** `%AppData%\Veyra\logs\topbar-JJJJMMTT.log` (7 Tage Aufbewahrung, max. 20 MB pro Tag). Vollbild-Übergänge werden mit Fensterklasse, Prozess und Rechteck protokolliert – ideal zum Pflegen der Ausnahmelisten.
 
 ---
 

@@ -1,0 +1,57 @@
+<UserControl x:Class="Veyra.SettingsUI.ColorField"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:Veyra.SettingsUI">
+    <UserControl.Resources>
+        <ui:HexToBrushConverter x:Key="HexToBrush" />
+    </UserControl.Resources>
+
+    <StackPanel Orientation="Horizontal">
+        <!-- Farbfeld: Klick öffnet den Farbkreis -->
+        <Button x:Name="SwatchButton" Width="34" Height="32" Cursor="Hand" ToolTip="Farbe im Farbkreis wählen" Click="OnSwatchClick">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Frame" CornerRadius="6" BorderBrush="#60FFFFFF" BorderThickness="1" Background="{TemplateBinding Background}" />
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Frame" Property="BorderBrush" Value="#C0FFFFFF" />
+                            <Setter TargetName="Frame" Property="BorderThickness" Value="2" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+
+        <TextBox x:Name="HexBox" Width="110" Margin="8,0,0,0" VerticalContentAlignment="Center"
+                 ToolTip="Eigene Farbe als #RRGGBB oder #AARRGGBB"
+                 Text="{Binding Value, RelativeSource={RelativeSource AncestorType=ui:ColorField}, UpdateSourceTrigger=PropertyChanged}" />
+
+        <!-- Vorlagen mit Farbfeld; "Eigene Farbe" ist gewählt, wenn der Wert keiner Vorlage entspricht -->
+        <ComboBox x:Name="Presets" Width="210" Margin="8,0,0,0" SelectionChanged="OnPresetSelected">
+            <ComboBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="16" Height="16" CornerRadius="3" Margin="0,0,10,0"
+                                BorderBrush="#60FFFFFF" BorderThickness="1"
+                                Background="{Binding Hex, Converter={StaticResource HexToBrush}}" />
+                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </DataTemplate>
+            </ComboBox.ItemTemplate>
+        </ComboBox>
+
+        <Popup x:Name="WheelPopup" PlacementTarget="{Binding ElementName=SwatchButton}" Placement="Bottom"
+               VerticalOffset="6" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="#2B2C33" BorderBrush="#45FFFFFF" BorderThickness="1" CornerRadius="10" Padding="16">
+                <StackPanel>
+                    <ui:ColorWheel x:Name="Wheel" />
+                    <DockPanel Margin="0,12,0,0" LastChildFill="False">
+                        <Border x:Name="PopupPreview" DockPanel.Dock="Left" Width="44" Height="28" CornerRadius="5" BorderBrush="#60FFFFFF" BorderThickness="1" />
+                        <TextBlock x:Name="PopupHex" DockPanel.Dock="Left" VerticalAlignment="Center" Margin="10,0,0,0" FontFamily="Consolas" />
+                        <Button DockPanel.Dock="Right" Content="Fertig" Click="OnDoneClick" />
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+        </Popup>
+    </StackPanel>
+</UserControl>
