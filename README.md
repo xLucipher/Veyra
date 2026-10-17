@@ -11,7 +11,7 @@
 
 - **Digitaluhr** exakt in der Bildschirmmitte, wahlweise mit Datum und Kalenderwoche. Ein Klick öffnet den Monatskalender.
 - **Audio-Schnellwechsel:** Buttons für Wiedergabegeräte und Mikrofone. Ein Klick macht das Gerät zum Standard, das aktive ist markiert. Pro Gerät lassen sich Symbol und Kurzname wählen.
-- **Widgets frei anordnen:** Die Uhr hat feste Positionen (links, Mitte, rechts). Alle anderen Widgets verschiebst du per Drag & Drop direkt auf der Leiste, ohne dass sie sich überlappen.
+- **Widgets frei anordnen:** Die Uhr hat feste Positionen (links, Mitte, rechts). Alle anderen Widgets verschiebst du per Drag & Drop direkt auf der Leiste, ohne dass sie sich überlappen. Mit der **freien Platzierung** lassen sich alle Widgets, auch die Uhr, beliebig auf der Leiste ablegen, auch übereinander oder in die Ecken.
 - **Automatisch ausgeblendet bei Vollbild:** bei Spielen (exklusiv und randlos), Videos und Browser-Vollbild. Danach erscheint die Leiste wieder.
 - **Gaming-freundlich:** praktisch keine CPU-Last im Leerlauf, keine GPU-Nutzung, kein Fokusdiebstahl und kein Eintrag in Alt+Tab.
 - **Fixiert oder dynamisch:** oben über die volle Breite angedockt – oder als frei bewegliches Fenster mit eigener Größe, Transparenz, abgerundeten Ecken und wählbarer Ebene (z. B. als durchsichtige Uhr im Hintergrund des Desktops).
@@ -37,6 +37,7 @@ Es sind keine Administratorrechte nötig. Veyra erscheint wie jedes andere Progr
 | Klick auf einen Audio-Button | Gerät als Standard verwenden |
 | Audio-Widget ziehen | Position auf der Leiste ändern |
 | Dynamische Leiste ziehen / an den Rändern ziehen | verschieben / Größe ändern (sperrbar per Rechtsklick) |
+| Strg + Ziehen (freie Platzierung) | dynamische Leiste verschieben, auch über einem Widget |
 | Veyra im Startmenü erneut starten | öffnet die Einstellungen |
 
 ## Updates

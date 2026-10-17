@@ -5,12 +5,15 @@ using Veyra.Configuration;
 
 namespace Veyra.Bar;
 
-public sealed class WidgetMovedEventArgs(string widgetId, double position) : EventArgs
+public sealed class WidgetMovedEventArgs(string widgetId, double position, Point? free = null) : EventArgs
 {
     public string WidgetId { get; } = widgetId;
 
     /// <summary>Neue Position der Widget-Mitte als Anteil der Leistenbreite (0..1).</summary>
     public double Position { get; } = position;
+
+    /// <summary>Nur bei freier Platzierung: Widget-Mitte als Anteil von Breite und Höhe (0..1).</summary>
+    public Point? Free { get; } = free;
 }
 
 /// <summary>
@@ -24,6 +27,11 @@ public sealed class WidgetMovedEventArgs(string widgetId, double position) : Eve
 /// 3. Drag &amp; Drop: Ein freies Widget wird ab einer kleinen Mindestbewegung gezogen. Es wird zuletzt platziert,
 ///    weicht also allen anderen aus und schiebt niemanden weg. Beim Loslassen wird die tatsächlich erreichte
 ///    Position gemeldet (<see cref="WidgetMoved"/>), ein Klick darauf (z. B. Gerätewechsel) wird dann unterdrückt.
+///
+/// Freie Platzierung (<see cref="FreePlacement"/>): Jedes Widget – auch die Uhr – steht dort, wo es abgelegt wurde
+/// (<see cref="FreeXProperty"/>/<see cref="FreeYProperty"/>, relativ zur Leistengröße), und lässt sich in alle
+/// Richtungen ziehen. Widgets dürfen sich dann überlappen; das zuletzt gezogene liegt oben. Widgets ohne eigene
+/// freie Position starten an ihrem Platz aus der normalen Anordnung.
 /// </summary>
 public sealed class BarLayoutPanel : Panel
 {
@@ -50,12 +58,27 @@ public sealed class BarLayoutPanel : Panel
         "Position", typeof(double), typeof(BarLayoutPanel),
         new FrameworkPropertyMetadata(0.5, FrameworkPropertyMetadataOptions.AffectsParentArrange));
 
+    /// <summary>Freie Platzierung: Widget-Mitte als Anteil der Breite (NaN = keine eigene Position).</summary>
+    public static readonly DependencyProperty FreeXProperty = DependencyProperty.RegisterAttached(
+        "FreeX", typeof(double), typeof(BarLayoutPanel),
+        new FrameworkPropertyMetadata(double.NaN, FrameworkPropertyMetadataOptions.AffectsParentArrange));
+
+    /// <summary>Freie Platzierung: Widget-Mitte als Anteil der Höhe (NaN = keine eigene Position).</summary>
+    public static readonly DependencyProperty FreeYProperty = DependencyProperty.RegisterAttached(
+        "FreeY", typeof(double), typeof(BarLayoutPanel),
+        new FrameworkPropertyMetadata(double.NaN, FrameworkPropertyMetadataOptions.AffectsParentArrange));
+
+    public static readonly DependencyProperty FreePlacementProperty = DependencyProperty.Register(
+        nameof(FreePlacement), typeof(bool), typeof(BarLayoutPanel),
+        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsArrange));
+
     private readonly Dictionary<UIElement, Rect> _arranged = [];
     private UIElement? _pressed;
     private Point _pressPoint;
-    private double _grabOffset;
+    private Vector _grabOffset;
     private UIElement? _dragging;
-    private double _dragLeft;
+    private Point _dragTopLeft;
+    private int _topZ;
 
     public BarLayoutPanel()
     {
@@ -64,6 +87,12 @@ public sealed class BarLayoutPanel : Panel
     }
 
     public event EventHandler<WidgetMovedEventArgs>? WidgetMoved;
+
+    public bool FreePlacement
+    {
+        get => (bool)GetValue(FreePlacementProperty);
+        set => SetValue(FreePlacementProperty, value);
+    }
 
     public static string GetWidgetId(UIElement e) => (string)e.GetValue(WidgetIdProperty);
     public static void SetWidgetId(UIElement e, string value) => e.SetValue(WidgetIdProperty, value);
@@ -75,6 +104,10 @@ public sealed class BarLayoutPanel : Panel
     public static void SetInnerSpacing(UIElement e, double value) => e.SetValue(InnerSpacingProperty, value);
     public static double GetPosition(UIElement e) => (double)e.GetValue(PositionProperty);
     public static void SetPosition(UIElement e, double value) => e.SetValue(PositionProperty, value);
+    public static double GetFreeX(UIElement e) => (double)e.GetValue(FreeXProperty);
+    public static void SetFreeX(UIElement e, double value) => e.SetValue(FreeXProperty, value);
+    public static double GetFreeY(UIElement e) => (double)e.GetValue(FreeYProperty);
+    public static void SetFreeY(UIElement e, double value) => e.SetValue(FreeYProperty, value);
 
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -94,12 +127,21 @@ public sealed class BarLayoutPanel : Panel
     protected override Size ArrangeOverride(Size finalSize)
     {
         _arranged.Clear();
+        ArrangeInSlots(finalSize);
+        if (FreePlacement) ArrangeFree(finalSize);
+        return finalSize;
+    }
+
+    /// <summary>Normale Anordnung: feste Bereiche, freie Widgets ohne Überlappung nebeneinander.</summary>
+    private void ArrangeInSlots(Size finalSize)
+    {
         double width = finalSize.Width;
         var blocked = new List<(double Start, double End)>
         {
             (double.NegativeInfinity, FreeGap),
             (width - FreeGap, double.PositiveInfinity),
         };
+        var dragging = FreePlacement ? null : _dragging;
 
         // 1) Feste Widgets je Bereich als Gruppe (mehrere im selben Bereich stehen nebeneinander, nie übereinander).
         foreach (var slot in new[] { WidgetSlot.Left, WidgetSlot.Center, WidgetSlot.Right })
@@ -129,17 +171,17 @@ public sealed class BarLayoutPanel : Panel
         // 2) Freie Widgets nach Wunschposition; das gezogene zuletzt (weicht allen aus, verdrängt niemanden).
         var free = InternalChildren.Cast<UIElement>()
             .Select((child, index) => (child, index))
-            .Where(t => GetFixedSlot(t.child) is null && t.child != _dragging)
+            .Where(t => GetFixedSlot(t.child) is null && t.child != dragging)
             .OrderBy(t => DesiredLeft(t.child, width))
             .ThenBy(t => t.index)
             .Select(t => t.child)
             .ToList();
-        if (_dragging is not null) free.Add(_dragging);
+        if (dragging is not null) free.Add(dragging);
 
         foreach (var child in free)
         {
             double w = child.DesiredSize.Width;
-            double desired = child == _dragging ? _dragLeft : DesiredLeft(child, width);
+            double desired = child == dragging ? _dragTopLeft.X : DesiredLeft(child, width);
             if (w <= 0)
             {
                 Place(child, desired, 0, finalSize.Height);
@@ -151,15 +193,41 @@ public sealed class BarLayoutPanel : Panel
             {
                 // Kein Platz mehr: außerhalb des sichtbaren Bereichs ablegen (Panel schneidet ab).
                 child.Arrange(new Rect(-10000, 0, w, finalSize.Height));
+                _arranged.Remove(child);
                 continue;
             }
 
             Place(child, x.Value, w, finalSize.Height);
             blocked.Add((x.Value - FreeGap, x.Value + w + FreeGap));
         }
-
-        return finalSize;
     }
+
+    /// <summary>Freie Platzierung: eigene Positionen überschreiben die normale Anordnung.</summary>
+    private void ArrangeFree(Size finalSize)
+    {
+        foreach (UIElement child in InternalChildren)
+        {
+            var size = new Size(child.DesiredSize.Width, Math.Min(child.DesiredSize.Height, finalSize.Height));
+            Point topLeft;
+            if (child == _dragging)
+                topLeft = _dragTopLeft;
+            else if (!double.IsNaN(GetFreeX(child)) && !double.IsNaN(GetFreeY(child)))
+                topLeft = new Point(GetFreeX(child) * finalSize.Width - size.Width / 2, GetFreeY(child) * finalSize.Height - size.Height / 2);
+            else if (_arranged.ContainsKey(child))
+                continue; // bleibt an seinem Platz aus der normalen Anordnung
+            else
+                topLeft = new Point((finalSize.Width - size.Width) / 2, (finalSize.Height - size.Height) / 2);
+
+            var rect = new Rect(ClampTopLeft(topLeft, size, finalSize), size);
+            child.Arrange(rect);
+            _arranged[child] = rect;
+        }
+    }
+
+    /// <summary>Hält das Widget vollständig innerhalb der Leiste (ist es größer, bündig links/oben).</summary>
+    private static Point ClampTopLeft(Point p, Size size, Size bounds) => new(
+        Math.Max(0, Math.Min(p.X, bounds.Width - size.Width)),
+        Math.Max(0, Math.Min(p.Y, bounds.Height - size.Height)));
 
     private void Place(UIElement child, double x, double w, double height)
     {
@@ -202,23 +270,31 @@ public sealed class BarLayoutPanel : Panel
         return best;
     }
 
-    /// <summary>Liegt an dieser Stelle (Panel-Koordinaten) ein frei verschiebbares Widget?</summary>
-    public bool IsFreeWidgetAt(Point point) =>
-        _arranged.Any(kv => GetFixedSlot(kv.Key) is null && kv.Value.Contains(point));
+    private bool IsDraggable(UIElement child) => FreePlacement || GetFixedSlot(child) is null;
+
+    /// <summary>Oberstes ziehbares Widget an dieser Stelle (Panel-Koordinaten) oder null.</summary>
+    private UIElement? DraggableAt(Point point) => _arranged
+        .Where(kv => IsDraggable(kv.Key) && kv.Value.Contains(point))
+        .Select(kv => kv.Key)
+        .OrderByDescending(GetZIndex)
+        .ThenByDescending(InternalChildren.IndexOf)
+        .FirstOrDefault();
+
+    /// <summary>Liegt an dieser Stelle (Panel-Koordinaten) ein Widget, das das Panel selbst verschiebt?</summary>
+    public bool IsDraggableWidgetAt(Point point) => DraggableAt(point) is not null;
+
+    /// <summary>Strg gedrückt: Das Fenster wird verschoben, nicht das Widget.</summary>
+    public static bool IsWindowMoveModifier => (Keyboard.Modifiers & ModifierKeys.Control) != 0;
 
     // ---- Drag & Drop ----------------------------------------------------------------------
 
     protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnPreviewMouseLeftButtonDown(e);
-        var point = e.GetPosition(this);
-        _pressed = _arranged
-            .Where(kv => GetFixedSlot(kv.Key) is null && kv.Value.Contains(point))
-            .Select(kv => kv.Key)
-            .FirstOrDefault();
+        _pressed = IsWindowMoveModifier ? null : DraggableAt(e.GetPosition(this));
         if (_pressed is null) return;
-        _pressPoint = point;
-        _grabOffset = point.X - _arranged[_pressed].X;
+        _pressPoint = e.GetPosition(this);
+        _grabOffset = _pressPoint - _arranged[_pressed].TopLeft;
     }
 
     protected override void OnPreviewMouseMove(MouseEventArgs e)
@@ -234,15 +310,19 @@ public sealed class BarLayoutPanel : Panel
         var point = e.GetPosition(this);
         if (_dragging is null)
         {
-            if (Math.Abs(point.X - _pressPoint.X) < DragThreshold) return;
+            bool moved = FreePlacement
+                ? (point - _pressPoint).Length >= DragThreshold
+                : Math.Abs(point.X - _pressPoint.X) >= DragThreshold;
+            if (!moved) return;
             // Ab hier ist es ein Ziehen: Maus übernehmen, damit der Button darunter keinen Klick auslöst.
             _dragging = _pressed;
             _dragging.Opacity = 0.7;
+            if (FreePlacement) SetZIndex(_dragging, ++_topZ); // gezogenes Widget liegt oben
             CaptureMouse();
-            Cursor = Cursors.SizeWE;
+            Cursor = FreePlacement ? Cursors.SizeAll : Cursors.SizeWE;
         }
 
-        _dragLeft = point.X - _grabOffset;
+        _dragTopLeft = point - _grabOffset;
         InvalidateArrange();
         e.Handled = true;
     }
@@ -256,11 +336,11 @@ public sealed class BarLayoutPanel : Panel
         var dropped = _dragging;
         EndDrag();
         UpdateLayout();
-        if (_arranged.TryGetValue(dropped, out var rect) && ActualWidth > 0)
+        if (_arranged.TryGetValue(dropped, out var rect) && ActualWidth > 0 && ActualHeight > 0)
         {
             double position = Math.Clamp((rect.X + rect.Width / 2) / ActualWidth, 0, 1);
-            SetPosition(dropped, position);
-            WidgetMoved?.Invoke(this, new WidgetMovedEventArgs(GetWidgetId(dropped), position));
+            Point? free = FreePlacement ? new Point(GetFreeX(dropped), GetFreeY(dropped)) : null;
+            WidgetMoved?.Invoke(this, new WidgetMovedEventArgs(GetWidgetId(dropped), position, free));
         }
         e.Handled = true;
     }
@@ -271,7 +351,9 @@ public sealed class BarLayoutPanel : Panel
         if (_dragging is not null && !IsMouseCaptured)
         {
             // Abgebrochen (z. B. Fokuswechsel): Widget kehrt an seine gespeicherte Position zurück.
-            EndDrag();
+            _dragging.Opacity = 1;
+            _dragging = null;
+            Cursor = null;
             InvalidateArrange();
         }
     }
@@ -282,8 +364,18 @@ public sealed class BarLayoutPanel : Panel
         if (dragged is not null)
         {
             // Wunschposition = erreichte Position, damit das Widget beim Freigeben nicht springt.
-            if (_arranged.TryGetValue(dragged, out var rect) && ActualWidth > 0)
-                SetPosition(dragged, Math.Clamp((rect.X + rect.Width / 2) / ActualWidth, 0, 1));
+            if (_arranged.TryGetValue(dragged, out var rect) && ActualWidth > 0 && ActualHeight > 0)
+            {
+                if (FreePlacement)
+                {
+                    SetFreeX(dragged, Math.Clamp((rect.X + rect.Width / 2) / ActualWidth, 0, 1));
+                    SetFreeY(dragged, Math.Clamp((rect.Y + rect.Height / 2) / ActualHeight, 0, 1));
+                }
+                else
+                {
+                    SetPosition(dragged, Math.Clamp((rect.X + rect.Width / 2) / ActualWidth, 0, 1));
+                }
+            }
             dragged.Opacity = 1;
         }
         _dragging = null;

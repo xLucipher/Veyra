@@ -83,6 +83,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         OpenReleasesCommand = new RelayCommand(() => Updates.UpdateService.OpenReleasePage());
         UpdateStatus = DescribeLastCheck();
         AddWidgetCommand = new RelayCommand(AddWidget, () => NewWidget is not null);
+        ResetFreePositionsCommand = new RelayCommand(ResetFreePositions);
         RefreshAudioDevicesCommand = new RelayCommand(RebuildAudioRows);
         _audioService.Changed += (_, _) => RebuildAudioRows();
 
@@ -95,6 +96,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     // ---- Widgets ----------------------------------------------------------------------------
     public ICommand AddWidgetCommand { get; }
+    public ICommand ResetFreePositionsCommand { get; }
     public ICommand RefreshAudioDevicesCommand { get; }
 
     public System.Collections.ObjectModel.ObservableCollection<WidgetRowViewModel> WidgetRows { get; } = [];
@@ -193,6 +195,19 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         return new WidgetRowViewModel(entry, devices, _settings.Audio, row => WidgetRows.Remove(row));
     }
 
+    /// <summary>Wirkt sofort auf der Leiste: Positionen werden direkt in der laufenden Konfiguration gelöscht.</summary>
+    private void ResetFreePositions()
+    {
+        var settings = _service.Current.Clone();
+        foreach (var widget in settings.Widgets)
+        {
+            widget.FreeX = null;
+            widget.FreeY = null;
+        }
+        _service.Save(settings);
+        StatusText = "Freie Positionen zurückgesetzt.";
+    }
+
     private void AddWidget()
     {
         if (NewWidget is null) return;
@@ -235,9 +250,9 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     {
         // Positionen aus der laufenden Konfiguration übernehmen: Sie können sich per Drag & Drop
         // geändert haben, während dieses Fenster offen war.
-        var live = _service.Current.Widgets.ToDictionary(w => w.Id, w => w.Position);
+        var live = _service.Current.Widgets.ToDictionary(w => w.Id);
         _settings.Widgets = WidgetRows
-            .Select(r => r.ToEntry(live.TryGetValue(r.Id, out var position) ? position : null))
+            .Select(r => r.ToEntry(live.GetValueOrDefault(r.Id)))
             .ToList();
 
         // Update-Entscheidungen ("Später"/"Nein") werden vom Update-Dienst gespeichert – nicht überschreiben.

@@ -173,6 +173,7 @@ public sealed class BarManager : IDisposable
     /// <summary>Überträgt Bereich, Abstände und Positionen auf die Widget-Ansichten (ohne Neuaufbau).</summary>
     private void ApplyWidgetLayout(AppSettings settings)
     {
+        if (_window is not null) _window.WidgetPanel.FreePlacement = settings.Appearance.FreeWidgetPlacement;
         foreach (var widget in _widgets)
         {
             var view = widget.View;
@@ -183,6 +184,8 @@ public sealed class BarManager : IDisposable
             BarLayoutPanel.SetOuterMargin(view, entry.OuterMargin);
             BarLayoutPanel.SetInnerSpacing(view, entry.InnerSpacing);
             BarLayoutPanel.SetPosition(view, entry.Position);
+            BarLayoutPanel.SetFreeX(view, entry.FreeX ?? double.NaN);
+            BarLayoutPanel.SetFreeY(view, entry.FreeY ?? double.NaN);
         }
     }
 
@@ -192,8 +195,17 @@ public sealed class BarManager : IDisposable
         var settings = _settings.Current.Clone();
         var entry = settings.Widgets.FirstOrDefault(w => w.Id == e.WidgetId);
         if (entry is null) return;
-        entry.Position = Math.Round(e.Position, 4);
-        Log.Info("Bar", $"Widget {entry.Type} ({entry.Id}) verschoben auf {entry.Position:P1}");
+        if (e.Free is { } free)
+        {
+            entry.FreeX = Math.Round(free.X, 4);
+            entry.FreeY = Math.Round(free.Y, 4);
+            Log.Info("Bar", $"Widget {entry.Type} ({entry.Id}) frei platziert auf {entry.FreeX:P1} / {entry.FreeY:P1}");
+        }
+        else
+        {
+            entry.Position = Math.Round(e.Position, 4);
+            Log.Info("Bar", $"Widget {entry.Type} ({entry.Id}) verschoben auf {entry.Position:P1}");
+        }
         _settings.Save(settings);
     }
 

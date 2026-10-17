@@ -133,8 +133,8 @@ public sealed class WidgetRowViewModel : ObservableObject
 
     public string PositionText => $"Position auf der Leiste: {_entry.Position:P0} – per Drag & Drop verschieben";
 
-    /// <param name="currentPosition">Position aus der laufenden Konfiguration (kann sich durch Drag &amp; Drop geändert haben).</param>
-    public WidgetEntry ToEntry(double? currentPosition) => new()
+    /// <param name="live">Eintrag aus der laufenden Konfiguration – Positionen können sich durch Drag &amp; Drop geändert haben.</param>
+    public WidgetEntry ToEntry(WidgetEntry? live) => new()
     {
         Id = _entry.Id,
         Type = _entry.Type,
@@ -142,7 +142,9 @@ public sealed class WidgetRowViewModel : ObservableObject
         Slot = Slot,
         OuterMargin = OuterMargin,
         InnerSpacing = InnerSpacing,
-        Position = currentPosition ?? _entry.Position,
+        Position = live?.Position ?? _entry.Position,
+        FreeX = live is null ? _entry.FreeX : live.FreeX,
+        FreeY = live is null ? _entry.FreeY : live.FreeY,
         Devices = AllDevices ? [] : Devices.Where(d => d.Selected).Select(d => d.Id).ToList(),
     };
 }

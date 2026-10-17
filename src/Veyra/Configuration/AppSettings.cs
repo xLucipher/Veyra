@@ -127,6 +127,14 @@ public sealed class WidgetEntry
     /// <summary>Nur freie Widgets: Position der Widget-Mitte als Anteil der Leistenbreite (0 = links, 1 = rechts).</summary>
     public double Position { get; set; } = -1;
 
+    /// <summary>
+    /// Freie Platzierung (<see cref="AppearanceSettings.FreeWidgetPlacement"/>): Widget-Mitte als Anteil von Breite
+    /// und Höhe der Leiste (0..1). null = noch nicht frei platziert → Startpunkt ist die normale Anordnung.
+    /// </summary>
+    public double? FreeX { get; set; }
+
+    public double? FreeY { get; set; }
+
     /// <summary>Nur Audio-Widgets: angezeigte Geräte (Endpunkt-IDs). Leer = alle aktiven Geräte.</summary>
     public List<string> Devices { get; set; } = [];
 
@@ -154,6 +162,16 @@ public sealed class WidgetEntry
         {
             // Ältere Konfigurationen hatten nur einen Bereich – daraus eine Startposition ableiten.
             Position = Slot switch { WidgetSlot.Left => 0.08, WidgetSlot.Center => 0.65, _ => 0.9 };
+        }
+        if (FreeX is not { } fx || !double.IsFinite(fx) || FreeY is not { } fy || !double.IsFinite(fy))
+        {
+            FreeX = null;
+            FreeY = null;
+        }
+        else
+        {
+            FreeX = Math.Clamp(Math.Round(fx, 4), 0, 1);
+            FreeY = Math.Clamp(Math.Round(fy, 4), 0, 1);
         }
         Devices = (Devices ?? []).Where(d => !string.IsNullOrWhiteSpace(d))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -234,6 +252,12 @@ public sealed class AppearanceSettings
 
     /// <summary>Dynamischer Modus: Verschieben und Größenänderung mit der Maus verhindern.</summary>
     public bool LockPosition { get; set; }
+
+    /// <summary>
+    /// Widgets (auch die Uhr) frei auf der Leiste platzieren – in beide Richtungen, Überlappen erlaubt.
+    /// Aus: Uhr in festem Bereich, andere Widgets nebeneinander ohne Überlappung.
+    /// </summary>
+    public bool FreeWidgetPlacement { get; set; }
 
     public string BackgroundColor { get; set; } = "#202127";
 

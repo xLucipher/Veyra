@@ -482,6 +482,27 @@
                         </DockPanel>
                     </Border>
 
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Settings.Appearance.FreeWidgetPlacement}" VerticalAlignment="Center" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Freie Platzierung" Style="{StaticResource RowTitle}" />
+                                    <TextBlock Style="{StaticResource RowHint}" TextWrapping="Wrap"
+                                               Text="Alle Widgets – auch die Uhr – lassen sich auf der Leiste frei verschieben: hoch, runter, links, rechts. Sie bleiben dort, wo du sie loslässt, und dürfen sich überlappen. Bereich und Abstände der Uhr gelten dann nicht. Die dynamische Leiste selbst verschiebst du an einer freien Stelle oder mit gedrückter Strg-Taste." />
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource Divider}" />
+                            <DockPanel Style="{StaticResource Row}">
+                                <Button DockPanel.Dock="Right" Content="Zurücksetzen" Command="{Binding ResetFreePositionsCommand}" VerticalAlignment="Center" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Freie Positionen zurücksetzen" Style="{StaticResource RowTitle}" />
+                                    <TextBlock Text="Setzt alle Widgets wieder an ihren Platz aus der normalen Anordnung." Style="{StaticResource RowHint}" />
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+
                     <ItemsControl ItemsSource="{Binding WidgetRows}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>

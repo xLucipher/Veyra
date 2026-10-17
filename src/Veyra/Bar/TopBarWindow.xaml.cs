@@ -192,8 +192,8 @@ public partial class TopBarWindow : Window
             return;
         }
 
-        // Freie Widgets verschiebt das Layout-Panel selbst; überall sonst wird das Fenster verschoben.
-        if (!WidgetPanel.IsFreeWidgetAt(e.GetPosition(WidgetPanel)))
+        // Ziehbare Widgets verschiebt das Layout-Panel selbst; überall sonst (oder mit Strg) wird das Fenster verschoben.
+        if (BarLayoutPanel.IsWindowMoveModifier || !WidgetPanel.IsDraggableWidgetAt(e.GetPosition(WidgetPanel)))
             _movePressPoint = e.GetPosition(this);
     }
 
