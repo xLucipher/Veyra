@@ -21,6 +21,8 @@ internal static class NativeMethods
 
     // ---- SetWindowPos ---------------------------------------------------------------------
     public static readonly IntPtr HWND_TOPMOST = new(-1);
+    public static readonly IntPtr HWND_NOTOPMOST = new(-2);
+    public static readonly IntPtr HWND_BOTTOM = new(1);
 
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOMOVE = 0x0002;
@@ -35,6 +37,7 @@ internal static class NativeMethods
     public const int WM_ACTIVATE = 0x0006;
     public const int WM_TIMECHANGE = 0x001E;
     public const int WM_MOUSEACTIVATE = 0x0021;
+    public const int WM_WINDOWPOSCHANGING = 0x0046;
     public const int WM_WINDOWPOSCHANGED = 0x0047;
     public const int WM_DISPLAYCHANGE = 0x007E;
     public const int WM_POWERBROADCAST = 0x0218;
@@ -139,6 +142,18 @@ internal static class NativeMethods
         public uint dmReserved2;
         public uint dmPanningWidth;
         public uint dmPanningHeight;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WINDOWPOS
+    {
+        public IntPtr hwnd;
+        public IntPtr hwndInsertAfter;
+        public int x;
+        public int y;
+        public int cx;
+        public int cy;
+        public uint flags;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -249,6 +264,13 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr MonitorFromRect(ref RECT lprc, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetCursorPos(out POINT lpPoint);
 
     [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW", CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)]

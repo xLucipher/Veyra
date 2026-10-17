@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -7,40 +6,83 @@ using Veyra.Core;
 
 namespace Veyra.Bar;
 
-/// <summary>ViewModel des Leistenfensters: Darstellung, Widget-Slots und Kontextmenü-Befehle.</summary>
+/// <summary>ViewModel des Leistenfensters: Darstellung und Kontextmenü-Befehle.</summary>
 public sealed class TopBarViewModel : ObservableObject
 {
-    private Brush _background = Brushes.Black;
+    private Brush _windowBackground = Brushes.Black;
+    private Brush _panelBackground = Brushes.Transparent;
+    private CornerRadius _cornerRadius;
     private Brush _borderBrush = Brushes.Transparent;
     private Thickness _borderThickness;
     private Brush _foreground = Brushes.White;
     private FontFamily _fontFamily = new("Segoe UI");
+    private Visibility _dynamicMenuVisibility = Visibility.Collapsed;
+    private bool _isLocked;
 
-    public TopBarViewModel(Action openSettings, Action reload, Action exit)
+    public TopBarViewModel(Action openSettings, Action reload, Action exit, Action toggleLock)
     {
         OpenSettingsCommand = new RelayCommand(openSettings);
         ReloadCommand = new RelayCommand(reload);
         ExitCommand = new RelayCommand(exit);
+        ToggleLockCommand = new RelayCommand(toggleLock);
     }
 
     public ICommand OpenSettingsCommand { get; }
     public ICommand ReloadCommand { get; }
     public ICommand ExitCommand { get; }
+    public ICommand ToggleLockCommand { get; }
 
-
-    public Brush Background { get => _background; private set => SetProperty(ref _background, value); }
+    /// <summary>Fixiert: deckende Fensterfarbe. Dynamisch: transparent – das Panel zeichnet Hintergrund und Ecken.</summary>
+    public Brush WindowBackground { get => _windowBackground; private set => SetProperty(ref _windowBackground, value); }
+    public Brush PanelBackground { get => _panelBackground; private set => SetProperty(ref _panelBackground, value); }
+    public CornerRadius CornerRadius { get => _cornerRadius; private set => SetProperty(ref _cornerRadius, value); }
     public Brush BorderBrush { get => _borderBrush; private set => SetProperty(ref _borderBrush, value); }
     public Thickness BorderThickness { get => _borderThickness; private set => SetProperty(ref _borderThickness, value); }
     public Brush Foreground { get => _foreground; private set => SetProperty(ref _foreground, value); }
     public FontFamily FontFamily { get => _fontFamily; private set => SetProperty(ref _fontFamily, value); }
 
+    /// <summary>"Position sperren" erscheint nur im dynamischen Modus.</summary>
+    public Visibility DynamicMenuVisibility { get => _dynamicMenuVisibility; private set => SetProperty(ref _dynamicMenuVisibility, value); }
+    public bool IsLocked
+    {
+        get => _isLocked;
+        private set
+        {
+            if (!SetProperty(ref _isLocked, value)) return;
+            OnPropertyChanged(nameof(LockMenuText));
+            OnPropertyChanged(nameof(LockMenuGlyph));
+        }
+    }
+
+    public string LockMenuText => _isLocked ? "Position entsperren" : "Position sperren";
+    public string LockMenuGlyph => _isLocked ? "" : "";
+
     public void Apply(AppSettings settings)
     {
         var a = settings.Appearance;
-        // FullWidth-Fenster ist nicht transparent (schneller, kein Layered-Window) → Deckkraft wirkt erst im Floating-Modus.
-        Background = ColorUtil.ToBrush(a.BackgroundColor, Color.FromRgb(0x20, 0x21, 0x27));
-        BorderBrush = ColorUtil.ToBrush(a.BorderColor, Colors.Transparent);
-        BorderThickness = new Thickness(0, 0, 0, a.BorderThickness);
+        var background = ColorUtil.ToBrush(a.BackgroundColor, Color.FromRgb(0x20, 0x21, 0x27));
+        var border = ColorUtil.ToBrush(a.BorderColor, Colors.Transparent);
+
+        if (a.IsDynamic)
+        {
+            WindowBackground = Brushes.Transparent;
+            PanelBackground = ColorUtil.ToBrush(a.BackgroundColor, Color.FromRgb(0x20, 0x21, 0x27), a.BackgroundOpacity);
+            CornerRadius = new CornerRadius(a.CornerRadius);
+            BorderThickness = new Thickness(a.BorderThickness);
+            DynamicMenuVisibility = Visibility.Visible;
+        }
+        else
+        {
+            // Fixiert: nicht transparentes Fenster (schneller, kein Layered-Window), Trennlinie nur unten.
+            WindowBackground = background;
+            PanelBackground = Brushes.Transparent;
+            CornerRadius = new CornerRadius(0);
+            BorderThickness = new Thickness(0, 0, 0, a.BorderThickness);
+            DynamicMenuVisibility = Visibility.Collapsed;
+        }
+
+        BorderBrush = border;
+        IsLocked = a.LockPosition;
         Foreground = ColorUtil.ToBrush(a.ForegroundColor, Colors.White);
         FontFamily = new FontFamily(a.FontFamily);
     }

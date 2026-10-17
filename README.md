@@ -14,6 +14,7 @@
 - **Widgets frei anordnen:** Die Uhr hat feste Positionen (links, Mitte, rechts). Alle anderen Widgets verschiebst du per Drag & Drop direkt auf der Leiste, ohne dass sie sich überlappen.
 - **Automatisch ausgeblendet bei Vollbild:** bei Spielen (exklusiv und randlos), Videos und Browser-Vollbild. Danach erscheint die Leiste wieder.
 - **Gaming-freundlich:** praktisch keine CPU-Last im Leerlauf, keine GPU-Nutzung, kein Fokusdiebstahl und kein Eintrag in Alt+Tab.
+- **Fixiert oder dynamisch:** oben über die volle Breite angedockt – oder als frei bewegliches Fenster mit eigener Größe, Transparenz, abgerundeten Ecken und wählbarer Ebene (z. B. als durchsichtige Uhr im Hintergrund des Desktops).
 - **Anpassbar:** Farben (inklusive Farbkreis), Schriften, Höhe, Formate, Monitor und optional ein reservierter Bildschirmbereich. Änderungen wirken sofort.
 - **Automatische Updates** über GitHub, mit Rückfrage.
 
@@ -35,6 +36,7 @@ Es sind keine Administratorrechte nötig. Veyra erscheint wie jedes andere Progr
 | Klick auf Uhrzeit/Datum | Monatskalender öffnen |
 | Klick auf einen Audio-Button | Gerät als Standard verwenden |
 | Audio-Widget ziehen | Position auf der Leiste ändern |
+| Dynamische Leiste ziehen / an den Rändern ziehen | verschieben / Größe ändern (sperrbar per Rechtsklick) |
 | Veyra im Startmenü erneut starten | öffnet die Einstellungen |
 
 ## Updates

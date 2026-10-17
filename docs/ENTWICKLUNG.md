@@ -41,7 +41,7 @@ src/Veyra/
 │  ├─ TopBarWindow.xaml(.cs)  WPF-Fenster + Win32-Belange (Stile, WndProc, SetWindowPos)
 │  ├─ TopBarViewModel.cs      Darstellung und Kontextmenü-Befehle
 │  ├─ BarLayoutPanel.cs       Widget-Layout: feste Bereiche, kollisionsfreie freie Widgets, Drag & Drop
-│  ├─ BarPlacement.cs         Geometrie (physische Pixel, DPI-skaliert); Erweiterungspunkt für Floating
+│  ├─ BarPlacement.cs         Geometrie (physische Pixel, DPI-skaliert); fixiert (oben, volle Breite) oder dynamisch (frei, eigene Größe)
 │  └─ AppBarRegistration.cs   SHAppBarMessage: Benachrichtigungen + optionale Bereichsreservierung
 ├─ Widgets/                   Widgets der Leiste
 │  ├─ IBarWidget.cs           Vertrag: View, ApplySettings, Start/Stop (pausiert bei Vollbild), Refresh
@@ -172,12 +172,16 @@ Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwe
 
 | Bereich | Schlüssel | Standard | Bedeutung |
 |---|---|---|---|
-| Appearance | `Mode` | `FullWidth` | `FullWidth` · `Floating` *(geplant – fällt auf FullWidth zurück)* |
+| Appearance | `Mode` | `FullWidth` | `FullWidth` = fixiert (oben, volle Breite) · `Floating` = dynamisch (frei beweglich) |
 | | `Height` | `48` | Höhe in geräteunabhängigen Pixeln (×1,5 bei 150 % Skalierung) |
 | | `BackgroundColor` | `#202127` | `#RGB`, `#RRGGBB`, `#AARRGGBB` |
 | | `ForegroundColor` / `FontFamily` | `#FFFFFF` / `Segoe UI` | Standard für alle Widgets |
-| | `BorderColor` / `BorderThickness` | `#2E3038` / `1` | dezente Trennlinie unten (0 = aus) |
-| | `Width`, `MarginTop`, `CornerRadius`, `BackgroundOpacity` | | *für Floating vorbereitet, in V1 ohne Wirkung* |
+| | `BorderColor` / `BorderThickness` | `#2E3038` / `1` | fixiert: Trennlinie unten, dynamisch: Rahmen rundherum (0 = aus) |
+| | `Width` / `FloatingHeight` | `1200` / `48` | dynamisch: Größe in px |
+| | `FloatingLeft` / `FloatingTop` | *(leer)* / *(leer)* | dynamisch: Position relativ zum Monitor; links leer = zentriert, oben leer = `MarginTop` |
+| | `Layer` | `Topmost` | dynamisch: `Topmost`, `Normal` oder `Desktop` (hinter allen Fenstern) |
+| | `LockPosition` | `false` | dynamisch: Verschieben/Größenänderung per Maus sperren |
+| | `BackgroundOpacity` / `CornerRadius` | `1` / `12` | dynamisch: Deckkraft 0–1 (0 = durchsichtig, Klicks gehen durch) und Eckenradius |
 | Behavior | `AlwaysOnTop` | `true` | |
 | | `ReserveScreenSpace` | `false` | `true` = AppBar (maximierte Fenster beginnen unter der Leiste), `false` = Overlay |
 | | `AutoHide`, `AutoHideDelayMs` | `false`, `400` | *geplant, in V1 ohne Wirkung* |
@@ -218,7 +222,7 @@ Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwe
 
 ## Roadmap
 
-- **Floating-Modus (B):** `BarPlacement` um Breite/Zentrierung/Abstand erweitern; Fenster mit `DWMWCP_ROUND` und optional `DWMWA_SYSTEMBACKDROP_TYPE` (Mica/Acrylic) statt WPF-Transparenz – bleibt performant.
+- **Dynamischer Modus:** optional Mica/Acrylic-Hintergrund über `DWMWA_SYSTEMBACKDROP_TYPE`, Einrasten an Bildschirmrändern.
 - **Auto-Hide:** Leiste außerhalb des sichtbaren Bereichs parken, Einblenden über einen 1-px-Auslöserstreifen am oberen Rand; während Vollbild deaktiviert.
 - **Mehrere Leisten:** `BarManager` je Monitor instanziieren (Detektor und Fenster sind bereits monitorbezogen).
 - **Weitere Widgets:** `IBarWidget` implementieren, Typ in `WidgetType`/`WidgetCatalog` eintragen und in `BarManager.CreateWidgets` erzeugen; fest oder frei legt `WidgetEntry.IsFixedType` fest. Kandidaten: CPU/RAM (PerformanceCounter-freie `GetSystemTimes`/`GlobalMemoryStatusEx`), Lautstärke (Core Audio), Medien (`GlobalSystemMediaTransportControlsSessionManager`), virtuelle Desktops.

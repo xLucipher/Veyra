@@ -16,17 +16,51 @@ public partial class TopBarWindow : Window
     private static readonly uint TaskbarCreatedMessage = RegisterWindowMessage("TaskbarCreated");
     private static readonly uint ShellHookMessage = RegisterWindowMessage("SHELLHOOK");
 
+    private const double ResizeBorder = 8;   // Greifbereich an den Rändern (geräteunabhängige Pixel)
+    private const double MoveThreshold = 4;  // ab dieser Bewegung wird aus einem Klick ein Verschieben
+
     private HwndSource? _source;
     private bool _sessionNotificationRegistered;
     private bool _shellHookRegistered;
 
-    public TopBarWindow(TopBarViewModel viewModel)
+    // Dynamischer Modus: Verschieben/Größenänderung mit der Maus.
+    private Point? _movePressPoint;
+    private ResizeEdge _resizeEdge;
+    private POINT _resizeStartCursor;
+    private RECT _resizeStartRect;
+
+    [Flags]
+    private enum ResizeEdge
+    {
+        None = 0,
+        Left = 1,
+        Top = 2,
+        Right = 4,
+        Bottom = 8,
+    }
+
+    /// <param name="dynamic">Dynamischer Modus: transparentes, frei bewegliches Fenster. Fixiert: deckendes Fenster (schneller).</param>
+    public TopBarWindow(TopBarViewModel viewModel, bool dynamic)
     {
         InitializeComponent();
+        IsDynamic = dynamic;
+        // Transparenz geht nur vor dem ersten Anzeigen – ein Moduswechsel erzeugt deshalb ein neues Fenster.
+        AllowsTransparency = dynamic;
         DataContext = viewModel;
     }
 
     public IntPtr Handle { get; private set; }
+
+    public bool IsDynamic { get; }
+
+    /// <summary>Dynamischer Modus: Verschieben und Größenänderung mit der Maus sperren.</summary>
+    public bool IsLocked { get; set; }
+
+    /// <summary>Dynamischer Modus: Fensterebene. Im fixierten Modus gilt <see cref="Window.Topmost"/>.</summary>
+    public Veyra.Configuration.WindowLayer Layer { get; set; } = Veyra.Configuration.WindowLayer.Topmost;
+
+    /// <summary>Der Benutzer hat das dynamische Fenster verschoben oder seine Größe geändert (physische Pixel).</summary>
+    public event EventHandler<RECT>? UserBoundsChanged;
 
     internal AppBarRegistration? AppBar { get; private set; }
 
@@ -92,6 +126,139 @@ public partial class TopBarWindow : Window
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
     }
 
+    /// <summary>Setzt die Z-Ebene laut <see cref="Layer"/> (dynamischer Modus).</summary>
+    public void ApplyLayer()
+    {
+        if (Handle == IntPtr.Zero || !IsDynamic) return;
+        Topmost = Layer == Veyra.Configuration.WindowLayer.Topmost;
+        var insertAfter = Layer switch
+        {
+            Veyra.Configuration.WindowLayer.Topmost => HWND_TOPMOST,
+            Veyra.Configuration.WindowLayer.Desktop => HWND_BOTTOM,
+            _ => HWND_NOTOPMOST,
+        };
+        SetWindowPos(Handle, insertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+    }
+
+    // ---- Dynamischer Modus: Verschieben und Größenänderung ---------------------------------
+
+    protected override void OnPreviewMouseMove(System.Windows.Input.MouseEventArgs e)
+    {
+        base.OnPreviewMouseMove(e);
+        if (!IsDynamic || IsLocked) return;
+
+        if (_resizeEdge != ResizeEdge.None)
+        {
+            ContinueResize();
+            e.Handled = true;
+            return;
+        }
+
+        if (_movePressPoint is { } press && e.LeftButton == System.Windows.Input.MouseButtonState.Pressed)
+        {
+            var now = e.GetPosition(this);
+            if (Math.Abs(now.X - press.X) < MoveThreshold && Math.Abs(now.Y - press.Y) < MoveThreshold) return;
+            _movePressPoint = null;
+            try
+            {
+                DragMove(); // läuft, bis die Maustaste losgelassen wird; der Klick (z. B. Kalender) entfällt dann
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+            RaiseUserBoundsChanged();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.LeftButton == System.Windows.Input.MouseButtonState.Released)
+            Cursor = CursorFor(EdgeAt(e.GetPosition(this)));
+    }
+
+    protected override void OnPreviewMouseLeftButtonDown(System.Windows.Input.MouseButtonEventArgs e)
+    {
+        base.OnPreviewMouseLeftButtonDown(e);
+        if (!IsDynamic || IsLocked) return;
+
+        var edge = EdgeAt(e.GetPosition(this));
+        if (edge != ResizeEdge.None)
+        {
+            _resizeEdge = edge;
+            GetCursorPos(out _resizeStartCursor);
+            GetWindowRect(Handle, out _resizeStartRect);
+            CaptureMouse();
+            e.Handled = true;
+            return;
+        }
+
+        // Freie Widgets verschiebt das Layout-Panel selbst; überall sonst wird das Fenster verschoben.
+        if (!WidgetPanel.IsFreeWidgetAt(e.GetPosition(WidgetPanel)))
+            _movePressPoint = e.GetPosition(this);
+    }
+
+    protected override void OnPreviewMouseLeftButtonUp(System.Windows.Input.MouseButtonEventArgs e)
+    {
+        base.OnPreviewMouseLeftButtonUp(e);
+        _movePressPoint = null;
+        if (_resizeEdge == ResizeEdge.None) return;
+        _resizeEdge = ResizeEdge.None;
+        ReleaseMouseCapture();
+        RaiseUserBoundsChanged();
+        e.Handled = true;
+    }
+
+    protected override void OnLostMouseCapture(System.Windows.Input.MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+        if (_resizeEdge == ResizeEdge.None) return;
+        _resizeEdge = ResizeEdge.None;
+        RaiseUserBoundsChanged();
+    }
+
+    private void ContinueResize()
+    {
+        GetCursorPos(out var cursor);
+        int dx = cursor.X - _resizeStartCursor.X;
+        int dy = cursor.Y - _resizeStartCursor.Y;
+        double scale = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX;
+        int minW = (int)(40 * scale), minH = (int)(16 * scale);
+        var r = _resizeStartRect;
+
+        if (_resizeEdge.HasFlag(ResizeEdge.Left)) r.Left = Math.Min(r.Left + dx, r.Right - minW);
+        if (_resizeEdge.HasFlag(ResizeEdge.Right)) r.Right = Math.Max(r.Right + dx, r.Left + minW);
+        if (_resizeEdge.HasFlag(ResizeEdge.Top)) r.Top = Math.Min(r.Top + dy, r.Bottom - minH);
+        if (_resizeEdge.HasFlag(ResizeEdge.Bottom)) r.Bottom = Math.Max(r.Bottom + dy, r.Top + minH);
+
+        SetWindowPos(Handle, IntPtr.Zero, r.Left, r.Top, r.Width, r.Height, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+    }
+
+    private ResizeEdge EdgeAt(Point p)
+    {
+        var edge = ResizeEdge.None;
+        if (p.X <= ResizeBorder) edge |= ResizeEdge.Left;
+        else if (p.X >= ActualWidth - ResizeBorder) edge |= ResizeEdge.Right;
+        if (p.Y <= ResizeBorder) edge |= ResizeEdge.Top;
+        else if (p.Y >= ActualHeight - ResizeBorder) edge |= ResizeEdge.Bottom;
+        return edge;
+    }
+
+    private static System.Windows.Input.Cursor? CursorFor(ResizeEdge edge) => edge switch
+    {
+        ResizeEdge.Left or ResizeEdge.Right => System.Windows.Input.Cursors.SizeWE,
+        ResizeEdge.Top or ResizeEdge.Bottom => System.Windows.Input.Cursors.SizeNS,
+        ResizeEdge.Left | ResizeEdge.Top or ResizeEdge.Right | ResizeEdge.Bottom => System.Windows.Input.Cursors.SizeNWSE,
+        ResizeEdge.Right | ResizeEdge.Top or ResizeEdge.Left | ResizeEdge.Bottom => System.Windows.Input.Cursors.SizeNESW,
+        _ => null,
+    };
+
+    private void RaiseUserBoundsChanged()
+    {
+        if (Handle == IntPtr.Zero) return;
+        GetWindowRect(Handle, out var rect);
+        UserBoundsChanged?.Invoke(this, rect);
+    }
+
     private void ApplyWindowStyles()
     {
         // Tool-Fenster: weder in Alt+Tab noch in der Taskleiste. NoActivate: Klicks stehlen keinen Fokus.
@@ -151,6 +318,14 @@ public partial class TopBarWindow : Window
 
                 case WM_WINDOWPOSCHANGED:
                     AppBar?.NotifyWindowPosChanged();
+                    break;
+
+                case WM_WINDOWPOSCHANGING when IsDynamic && Layer == Veyra.Configuration.WindowLayer.Desktop:
+                    // Ebene "Im Hintergrund": jede Z-Order-Änderung wird nach ganz unten umgelenkt.
+                    var pos = System.Runtime.InteropServices.Marshal.PtrToStructure<WINDOWPOS>(lParam);
+                    pos.hwndInsertAfter = HWND_BOTTOM;
+                    pos.flags &= ~SWP_NOZORDER;
+                    System.Runtime.InteropServices.Marshal.StructureToPtr(pos, lParam, false);
                     break;
             }
 

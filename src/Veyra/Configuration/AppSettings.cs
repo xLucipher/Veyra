@@ -5,11 +5,24 @@ namespace Veyra.Configuration;
 
 public enum BarMode
 {
-    /// <summary>Modus A: volle Bildschirmbreite, oben angedockt (implementiert).</summary>
+    /// <summary>Fixiert: volle Bildschirmbreite, oben angedockt.</summary>
     FullWidth,
 
-    /// <summary>Modus B: schwebende Leiste mit eigener Breite (geplant, noch nicht implementiert).</summary>
+    /// <summary>Dynamisch: frei bewegliches Fenster mit eigener Größe, Transparenz und Ecken.</summary>
     Floating,
+}
+
+/// <summary>Fensterebene im dynamischen Modus.</summary>
+public enum WindowLayer
+{
+    /// <summary>Immer über allen Fenstern.</summary>
+    Topmost,
+
+    /// <summary>Wie ein normales Fenster – andere Fenster dürfen es verdecken.</summary>
+    Normal,
+
+    /// <summary>Immer hinter allen Fenstern, wie ein Desktop-Widget.</summary>
+    Desktop,
 }
 
 /// <summary>Wurzelobjekt von %AppData%\Veyra\settings.json.</summary>
@@ -198,22 +211,40 @@ public sealed class AppearanceSettings
 {
     public BarMode Mode { get; set; } = BarMode.FullWidth;
 
-    /// <summary>Höhe in geräteunabhängigen Pixeln (bei 150 % Skalierung → 1,5 × physisch).</summary>
+    /// <summary>Fixierter Modus: Höhe in geräteunabhängigen Pixeln (bei 150 % Skalierung → 1,5 × physisch).</summary>
     public int Height { get; set; } = 48;
 
-    /// <summary>Breite im Floating-Modus (geplant).</summary>
+    /// <summary>Dynamischer Modus: Breite in geräteunabhängigen Pixeln.</summary>
     public int Width { get; set; } = 1200;
+
+    /// <summary>Dynamischer Modus: Höhe in geräteunabhängigen Pixeln.</summary>
+    public int FloatingHeight { get; set; } = 48;
+
+    /// <summary>Dynamischer Modus: linke Kante relativ zum Monitor (px); null = horizontal zentriert.</summary>
+    public double? FloatingLeft { get; set; }
+
+    /// <summary>Dynamischer Modus: obere Kante relativ zum Monitor (px); null = <see cref="MarginTop"/>.</summary>
+    public double? FloatingTop { get; set; }
+
+    /// <summary>Dynamischer Modus: Abstand zum oberen Rand, solange keine eigene Position gesetzt ist.</summary>
+    public int MarginTop { get; set; } = 8;
+
+    /// <summary>Dynamischer Modus: Vordergrund, normal oder hinter allen Fenstern.</summary>
+    public WindowLayer Layer { get; set; } = WindowLayer.Topmost;
+
+    /// <summary>Dynamischer Modus: Verschieben und Größenänderung mit der Maus verhindern.</summary>
+    public bool LockPosition { get; set; }
 
     public string BackgroundColor { get; set; } = "#202127";
 
-    /// <summary>Hintergrund-Deckkraft 0..1 – wirkt erst im Floating-Modus (geplant).</summary>
+    /// <summary>Dynamischer Modus: Hintergrund-Deckkraft 0..1 (0 = komplett durchsichtig).</summary>
     public double BackgroundOpacity { get; set; } = 1.0;
 
-    /// <summary>Eckenradius im Floating-Modus (geplant).</summary>
+    /// <summary>Dynamischer Modus: Eckenradius.</summary>
     public int CornerRadius { get; set; } = 12;
 
-    /// <summary>Abstand zum oberen Rand im Floating-Modus (geplant).</summary>
-    public int MarginTop { get; set; } = 8;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsDynamic => Mode == BarMode.Floating;
 
     public string FontFamily { get; set; } = "Segoe UI";
     public string ForegroundColor { get; set; } = "#FFFFFF";
@@ -224,10 +255,14 @@ public sealed class AppearanceSettings
     {
         var d = new AppearanceSettings();
         if (!Enum.IsDefined(Mode)) Mode = d.Mode;
+        if (!Enum.IsDefined(Layer)) Layer = d.Layer;
         Height = Math.Clamp(Height, 16, 200);
-        Width = Math.Clamp(Width, 200, 10000);
+        Width = Math.Clamp(Width, 40, 10000);
+        FloatingHeight = Math.Clamp(FloatingHeight, 16, 4000);
+        FloatingLeft = FloatingLeft is { } left && double.IsFinite(left) ? Math.Clamp(Math.Round(left, 1), -10000, 20000) : null;
+        FloatingTop = FloatingTop is { } top && double.IsFinite(top) ? Math.Clamp(Math.Round(top, 1), -10000, 20000) : null;
         BackgroundOpacity = double.IsFinite(BackgroundOpacity) ? Math.Clamp(BackgroundOpacity, 0.0, 1.0) : 1.0;
-        CornerRadius = Math.Clamp(CornerRadius, 0, 64);
+        CornerRadius = Math.Clamp(CornerRadius, 0, 2000);
         MarginTop = Math.Clamp(MarginTop, 0, 500);
         BorderThickness = Math.Clamp(BorderThickness, 0, 8);
         FontFamily = string.IsNullOrWhiteSpace(FontFamily) ? d.FontFamily : FontFamily.Trim();

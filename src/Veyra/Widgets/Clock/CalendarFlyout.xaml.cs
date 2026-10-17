@@ -24,13 +24,17 @@ public partial class CalendarFlyout : Window
     private readonly DispatcherTimer _timer;
     private readonly int _anchorX;
     private readonly int _anchorY;
+    private readonly int _barTop;
+    private readonly int _barBottom;
 
-    private CalendarFlyout(CultureInfo culture, int anchorX, int anchorY, double scale)
+    private CalendarFlyout(CultureInfo culture, int anchorX, int anchorY, int barTop, int barBottom, double scale)
     {
         InitializeComponent();
         _culture = culture;
         _anchorX = anchorX;
         _anchorY = anchorY;
+        _barTop = barTop;
+        _barBottom = barBottom;
 
         Language = XmlLanguage.GetLanguage(culture.IetfLanguageTag);
         MonthCalendar.FirstDayOfWeek = culture.DateTimeFormat.FirstDayOfWeek;
@@ -64,7 +68,7 @@ public partial class CalendarFlyout : Window
         double scale = monitor?.Scale ?? 1.0;
 
         var center = anchor.PointToScreen(new Point(anchor.ActualWidth / 2, 0)); // physische Pixel
-        var flyout = new CalendarFlyout(culture, (int)center.X, barRect.Bottom + (int)(8 * scale), scale);
+        var flyout = new CalendarFlyout(culture, (int)center.X, barRect.Bottom + (int)(8 * scale), barRect.Top, barRect.Bottom, scale);
         _current = flyout;
         flyout.Show();
         flyout.Activate();
@@ -89,11 +93,17 @@ public partial class CalendarFlyout : Window
         int x = _anchorX - rect.Width / 2;
 
         // Innerhalb des Monitors halten.
+        int y = _anchorY;
         var monitor = MonitorService.Query(MonitorFromWindow(handle, MONITOR_DEFAULTTONEAREST));
         if (monitor is not null)
+        {
             x = Math.Clamp(x, monitor.WorkArea.Left + 8, Math.Max(monitor.WorkArea.Left + 8, monitor.WorkArea.Right - rect.Width - 8));
+            // Dynamische Leiste weit unten: Kalender oberhalb öffnen, damit er nicht aus dem Bild ragt.
+            if (y + rect.Height > monitor.WorkArea.Bottom)
+                y = Math.Max(monitor.WorkArea.Top, _barTop - rect.Height - (_anchorY - _barBottom));
+        }
 
-        SetWindowPos(handle, IntPtr.Zero, x, _anchorY, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(handle, IntPtr.Zero, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         _timer.Start();
     }
 

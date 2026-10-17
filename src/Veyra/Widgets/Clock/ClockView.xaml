@@ -23,6 +23,7 @@
                    Foreground="{Binding DateForeground}"
                    HorizontalAlignment="Center"
                    TextAlignment="Center"
+                   TextWrapping="Wrap"
                    Margin="0,-1,0,0"
                    Typography.NumeralAlignment="Tabular" />
     </StackPanel>

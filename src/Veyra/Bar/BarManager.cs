@@ -38,7 +38,6 @@ public sealed class BarManager : IDisposable
     /// <summary>True, solange die Leiste wegen einer Vollbildanwendung ausgeblendet ist (dann nicht stören).</summary>
     public bool IsHiddenForFullscreen => _hiddenForFullscreen;
     private bool _forceNextLayout;
-    private bool _floatingWarningLogged;
     private bool _autoHideWarningLogged;
     private bool _disposed;
 
@@ -108,10 +107,11 @@ public sealed class BarManager : IDisposable
     {
         var settings = _settings.Current;
 
-        _viewModel = new TopBarViewModel(_openSettings, Reload, _exit);
-        var window = new TopBarWindow(_viewModel);
+        _viewModel = new TopBarViewModel(_openSettings, Reload, _exit, ToggleLock);
+        var window = new TopBarWindow(_viewModel, settings.Appearance.IsDynamic);
         _window = window;
         window.WidgetPanel.WidgetMoved += OnWidgetMoved;
+        window.UserBoundsChanged += OnUserBoundsChanged;
         CreateWidgets(settings);
 
         window.SourceInitialized += (_, _) =>
@@ -227,6 +227,16 @@ public sealed class BarManager : IDisposable
 
     private void OnSettingsChanged(object? sender, AppSettings settings)
     {
+        if (_window is not null && _window.IsDynamic != settings.Appearance.IsDynamic)
+        {
+            // Moduswechsel fixiert ↔ dynamisch: anderes Fenster (Transparenz) → Leiste neu aufbauen.
+            Log.Info("Bar", $"Modus gewechselt: {(settings.Appearance.IsDynamic ? "dynamisch" : "fixiert")}");
+            TearDownBar();
+            BuildBar();
+            _detector.EvaluateNow();
+            return;
+        }
+
         if (LayoutSignature(settings) != _widgetLayout)
         {
             // Widgets hinzugefügt, entfernt oder (de)aktiviert → nur die Widgets neu aufbauen, nicht das Fenster.
@@ -251,11 +261,6 @@ public sealed class BarManager : IDisposable
         Log.Verbose = settings.System.EnableLogging;
         AutoStart.Apply(settings.System.StartWithWindows);
 
-        if (settings.Appearance.Mode == BarMode.Floating && !_floatingWarningLogged)
-        {
-            Log.Warning("Bar", "Modus 'Floating' ist in Version 1 noch nicht implementiert – 'FullWidth' wird verwendet.");
-            _floatingWarningLogged = true;
-        }
         if (settings.Behavior.AutoHide && !_autoHideWarningLogged)
         {
             Log.Warning("Bar", "'AutoHide' ist in Version 1 noch nicht implementiert – die Leiste bleibt sichtbar.");
@@ -268,10 +273,19 @@ public sealed class BarManager : IDisposable
 
         if (_window is not null)
         {
-            _window.Topmost = settings.Behavior.AlwaysOnTop;
+            if (_window.IsDynamic)
+            {
+                _window.Layer = settings.Appearance.Layer;
+                _window.IsLocked = settings.Appearance.LockPosition;
+                _window.ApplyLayer();
+            }
+            else
+            {
+                _window.Topmost = settings.Behavior.AlwaysOnTop;
+            }
 
             var appBar = _window.AppBar;
-            if (appBar is not null && !settings.Behavior.ReserveScreenSpace && appBar.IsReserving)
+            if (appBar is not null && !ReservesScreenSpace(settings) && appBar.IsReserving)
             {
                 // Reservierung aufheben: neu registrieren (nur noch Benachrichtigungen, kein reservierter Bereich).
                 appBar.Reset();
@@ -305,11 +319,12 @@ public sealed class BarManager : IDisposable
         _detector.Monitor = monitor;
 
         RECT rect = BarPlacement.Compute(settings.Appearance, monitor);
-        if (settings.Behavior.ReserveScreenSpace && window.AppBar is { } appBar)
+        if (ReservesScreenSpace(settings) && window.AppBar is { } appBar)
             rect = appBar.Reserve(rect, force || monitorChanged);
 
         window.ApplyBounds(rect);
         KeepOnTop();
+        if (window.IsDynamic) window.ApplyLayer();
 
         if (force || monitorChanged)
             Log.Info("Bar", $"Positioniert auf {monitor.Description}: {rect}");
@@ -349,8 +364,49 @@ public sealed class BarManager : IDisposable
 
     private void KeepOnTop()
     {
-        if (_window is not null && !_hiddenForFullscreen && _settings.Current.Behavior.AlwaysOnTop)
-            _window.EnsureTopmost();
+        if (_window is null || _hiddenForFullscreen) return;
+        var settings = _settings.Current;
+        bool topmost = _window.IsDynamic
+            ? settings.Appearance.Layer == WindowLayer.Topmost
+            : settings.Behavior.AlwaysOnTop;
+        if (topmost) _window.EnsureTopmost();
+    }
+
+    /// <summary>Bildschirmbereich reservieren gibt es nur im fixierten Modus.</summary>
+    private static bool ReservesScreenSpace(AppSettings settings) =>
+        !settings.Appearance.IsDynamic && settings.Behavior.ReserveScreenSpace;
+
+    /// <summary>
+    /// Dynamischer Modus: Der Benutzer hat die Leiste verschoben oder ihre Größe geändert → speichern.
+    /// Landet sie auf einem anderen Monitor, wird dieser zum Monitor der Leiste.
+    /// </summary>
+    private void OnUserBoundsChanged(object? sender, RECT rect)
+    {
+        var hMonitor = NativeMethods.MonitorFromRect(ref rect, NativeMethods.MONITOR_DEFAULTTONEAREST);
+        var monitor = MonitorService.Query(hMonitor) ?? _monitor;
+        if (monitor is null) return;
+
+        double scale = monitor.Scale;
+        var settings = _settings.Current.Clone();
+        var a = settings.Appearance;
+        a.FloatingLeft = Math.Round((rect.Left - monitor.Bounds.Left) / scale, 1);
+        a.FloatingTop = Math.Round((rect.Top - monitor.Bounds.Top) / scale, 1);
+        a.Width = (int)Math.Round(rect.Width / scale);
+        a.FloatingHeight = (int)Math.Round(rect.Height / scale);
+
+        if (_monitor is not null && monitor.DeviceName != _monitor.DeviceName)
+            settings.System.MonitorSelection = monitor.IsPrimary ? MonitorService.PrimarySelection : monitor.DeviceName;
+
+        Log.Info("Bar", $"Dynamische Leiste: {a.Width}×{a.FloatingHeight} bei {a.FloatingLeft},{a.FloatingTop} auf {monitor.DeviceName}");
+        _settings.Save(settings);
+    }
+
+    /// <summary>Kontextmenü "Position sperren/entsperren".</summary>
+    private void ToggleLock()
+    {
+        var settings = _settings.Current.Clone();
+        settings.Appearance.LockPosition = !settings.Appearance.LockPosition;
+        _settings.Save(settings);
     }
 
     private void OnShellRestarted()

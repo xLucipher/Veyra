@@ -41,6 +41,12 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     {
         _service = service;
         _settings = service.Current.Clone();
+        _geometrySnapshot = Geometry(_settings);
+        CenterHorizontallyCommand = new RelayCommand(() =>
+        {
+            _settings.Appearance.FloatingLeft = null;
+            OnPropertyChanged(nameof(Settings));
+        });
 
         FontFamilies = Fonts.SystemFontFamilies.Select(f => f.Source).Distinct()
             .OrderBy(s => s, StringComparer.CurrentCultureIgnoreCase).ToList();
@@ -99,6 +105,63 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public IReadOnlyList<EnumOption> SlotOptions => WidgetCatalog.Slots;
     public IReadOnlyList<double> MarginPresets => WidgetCatalog.MarginPresets;
     public IReadOnlyList<double> SpacingPresets => WidgetCatalog.SpacingPresets;
+
+    // ---- Leistenmodus ----------------------------------------------------------------------
+    public ICommand CenterHorizontallyCommand { get; }
+
+    public IReadOnlyList<int> CornerRadiusPresets { get; } = [0, 4, 8, 12, 16, 24, 32, 50, 100];
+
+    public IReadOnlyList<EnumOption> BarModeOptions { get; } =
+    [
+        new(BarMode.FullWidth, "Fixiert – oben, volle Breite"),
+        new(BarMode.Floating, "Dynamisch – frei beweglich"),
+    ];
+
+    public IReadOnlyList<EnumOption> LayerOptions { get; } =
+    [
+        new(WindowLayer.Topmost, "Immer im Vordergrund"),
+        new(WindowLayer.Normal, "Normal"),
+        new(WindowLayer.Desktop, "Im Hintergrund (Desktop-Widget)"),
+    ];
+
+    public BarMode BarMode
+    {
+        get => _settings.Appearance.Mode;
+        set
+        {
+            if (!Enum.IsDefined(value) || value == _settings.Appearance.Mode) return;
+            _settings.Appearance.Mode = value;
+            if (value == BarMode.Floating && _settings.Appearance.FloatingLeft is null && _settings.Appearance.FloatingTop is null)
+                InitDynamicFromFixed();
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(FixedVisibility));
+            OnPropertyChanged(nameof(DynamicVisibility));
+            OnPropertyChanged(nameof(Settings));
+        }
+    }
+
+    public System.Windows.Visibility FixedVisibility =>
+        _settings.Appearance.IsDynamic ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+
+    public System.Windows.Visibility DynamicVisibility =>
+        _settings.Appearance.IsDynamic ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+    /// <summary>Erster Wechsel auf dynamisch: dieselbe Leiste, nur schwebend – oben, fast volle Breite, abgerundet.</summary>
+    private void InitDynamicFromFixed()
+    {
+        var a = _settings.Appearance;
+        var monitor = MonitorService.Resolve(_settings.System.MonitorSelection);
+        double widthDip = monitor is null ? 1600 : monitor.Bounds.Width / monitor.Scale;
+        a.Width = (int)Math.Max(200, widthDip - 32);
+        a.FloatingHeight = a.Height;
+        a.FloatingLeft = 16;
+        a.FloatingTop = 8;
+    }
+
+    private (double? Left, double? Top, int Width, int Height, string Monitor) _geometrySnapshot;
+
+    private static (double? Left, double? Top, int Width, int Height, string Monitor) Geometry(AppSettings s) =>
+        (s.Appearance.FloatingLeft, s.Appearance.FloatingTop, s.Appearance.Width, s.Appearance.FloatingHeight, s.System.MonitorSelection);
 
     public IReadOnlyList<EnumOption> LabelModeOptions { get; } =
     [
@@ -178,6 +241,18 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             .ToList();
 
         // Update-Entscheidungen ("Später"/"Nein") werden vom Update-Dienst gespeichert – nicht überschreiben.
+        // Position/Größe der dynamischen Leiste: Wurde sie hier nicht geändert, gilt der Stand aus der laufenden
+        // Konfiguration (sie kann per Maus verschoben worden sein, während dieses Fenster offen war).
+        if (Geometry(_settings) == _geometrySnapshot)
+        {
+            var liveSettings = _service.Current;
+            _settings.Appearance.FloatingLeft = liveSettings.Appearance.FloatingLeft;
+            _settings.Appearance.FloatingTop = liveSettings.Appearance.FloatingTop;
+            _settings.Appearance.Width = liveSettings.Appearance.Width;
+            _settings.Appearance.FloatingHeight = liveSettings.Appearance.FloatingHeight;
+            _settings.System.MonitorSelection = liveSettings.System.MonitorSelection;
+        }
+
         var liveUpdates = _service.Current.Updates;
         _settings.Updates.SkippedVersion = liveUpdates.SkippedVersion;
         _settings.Updates.RemindAfterUtc = liveUpdates.RemindAfterUtc;
@@ -340,6 +415,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     private void ReplaceSettings(AppSettings settings)
     {
         _settings = settings;
+        _geometrySnapshot = Geometry(settings);
         RebuildOptions();
         RefreshMonitors();
         RebuildWidgetRows();

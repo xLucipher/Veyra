@@ -13,7 +13,7 @@
         SnapsToDevicePixels="True"
         WindowStartupLocation="Manual"
         Left="0" Top="0" Width="800" Height="48"
-        Background="{Binding Background}">
+        Background="{Binding WindowBackground}">
 
     <Window.Resources>
         <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
@@ -87,13 +87,18 @@
         </Style>
     </Window.Resources>
 
-    <!-- Transparenter Hintergrund macht die gesamte Fläche für das Kontextmenü klickbar. -->
-    <Border Background="Transparent"
+    <!-- Fixiert: transparenter Panel-Hintergrund macht die Fläche für das Kontextmenü klickbar.
+         Dynamisch: Panel zeichnet Hintergrund (mit Deckkraft), Ecken und Rahmen; völlig durchsichtige Stellen
+         lassen Klicks zum Desktop durch. -->
+    <Border Background="{Binding PanelBackground}"
+            CornerRadius="{Binding CornerRadius}"
             BorderBrush="{Binding BorderBrush}"
             BorderThickness="{Binding BorderThickness}">
         <Border.ContextMenu>
             <ContextMenu>
                 <MenuItem Header="Einstellungen" Tag="&#xE713;" Command="{Binding OpenSettingsCommand}" />
+                <MenuItem Header="{Binding LockMenuText}" Tag="{Binding LockMenuGlyph}" Command="{Binding ToggleLockCommand}"
+                          Visibility="{Binding DynamicMenuVisibility}" />
                 <MenuItem Header="Leiste neu laden" Tag="&#xE72C;" Command="{Binding ReloadCommand}" />
                 <Separator />
                 <MenuItem Header="Beenden" Tag="&#xE7E8;" Command="{Binding ExitCommand}" />

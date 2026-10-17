@@ -47,6 +47,10 @@ public static class AutoStart
                 var exe = Environment.ProcessPath;
                 if (string.IsNullOrEmpty(exe)) return;
                 var desired = $"\"{exe}\"";
+                // Einen gültigen Eintrag (z. B. vom Installer) nicht durch eine andere Kopie überschreiben –
+                // sonst würde jeder Start eines Test-Builds den Autostart auf sich umbiegen.
+                if (current is not null && File.Exists(current.Trim().Trim('"')))
+                    return;
                 if (!string.Equals(current, desired, StringComparison.OrdinalIgnoreCase))
                 {
                     key.SetValue(ValueName, desired);

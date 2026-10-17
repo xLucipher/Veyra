@@ -81,7 +81,9 @@ public sealed class BarLayoutPanel : Panel
         double height = 0, width = 0;
         foreach (UIElement child in InternalChildren)
         {
-            child.Measure(new Size(double.PositiveInfinity, availableSize.Height));
+            // Breite begrenzen: In schmalen dynamischen Leisten (z. B. 200 px) brechen Texte wie das Datum um, statt abgeschnitten zu werden.
+            double maxWidth = double.IsInfinity(availableSize.Width) ? double.PositiveInfinity : Math.Max(0, availableSize.Width - 2 * FreeGap);
+            child.Measure(new Size(maxWidth, availableSize.Height));
             height = Math.Max(height, child.DesiredSize.Height);
             width += child.DesiredSize.Width;
         }
@@ -199,6 +201,10 @@ public sealed class BarLayoutPanel : Panel
         }
         return best;
     }
+
+    /// <summary>Liegt an dieser Stelle (Panel-Koordinaten) ein frei verschiebbares Widget?</summary>
+    public bool IsFreeWidgetAt(Point point) =>
+        _arranged.Any(kv => GetFixedSlot(kv.Key) is null && kv.Value.Contains(point));
 
     // ---- Drag & Drop ----------------------------------------------------------------------
 

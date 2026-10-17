@@ -234,17 +234,15 @@
                         <StackPanel>
                             <TextBlock Text="Leiste" Style="{StaticResource CardTitle}" />
                             <DockPanel Style="{StaticResource Row}">
-                                <ComboBox DockPanel.Dock="Right" SelectedValuePath="Tag" SelectedValue="{Binding Settings.Appearance.Mode}" Width="300" VerticalAlignment="Center">
-                                    <ComboBoxItem Content="Durchgehend (FullWidth)" Tag="{x:Static cfg:BarMode.FullWidth}" />
-                                    <ComboBoxItem Content="Schwebend (Floating) – geplant" Tag="{x:Static cfg:BarMode.Floating}" IsEnabled="False" />
-                                </ComboBox>
+                                <ComboBox DockPanel.Dock="Right" ItemsSource="{Binding BarModeOptions}" DisplayMemberPath="Display" SelectedValuePath="Value"
+                                          SelectedValue="{Binding BarMode}" Width="300" VerticalAlignment="Center" />
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Leistenmodus" Style="{StaticResource RowTitle}" />
-                                    <TextBlock Text="Durchgehend über die volle Bildschirmbreite." Style="{StaticResource RowHint}" />
+                                    <TextBlock Text="Modus" Style="{StaticResource RowTitle}" />
+                                    <TextBlock Text="Fixiert: oben angedockt über die volle Breite. Dynamisch: frei bewegliches Fenster mit eigener Größe, Transparenz und Ecken – z. B. als Desktop-Uhr." Style="{StaticResource RowHint}" />
                                 </StackPanel>
                             </DockPanel>
-                            <Border Style="{StaticResource Divider}" />
-                            <DockPanel Style="{StaticResource Row}">
+                            <Border Style="{StaticResource Divider}" Visibility="{Binding FixedVisibility}" />
+                            <DockPanel Style="{StaticResource Row}" Visibility="{Binding FixedVisibility}">
                                 <ComboBox DockPanel.Dock="Right" IsEditable="True" ItemsSource="{Binding HeightPresets}" Width="120" VerticalAlignment="Center"
                                           Text="{Binding Settings.Appearance.Height, UpdateSourceTrigger=PropertyChanged}" />
                                 <StackPanel VerticalAlignment="Center">
@@ -264,12 +262,90 @@
                             <DockPanel Style="{StaticResource Row}">
                                 <ComboBox DockPanel.Dock="Right" ItemsSource="{Binding BorderThicknessOptions}" DisplayMemberPath="Display" SelectedValuePath="Value"
                                           SelectedValue="{Binding Settings.Appearance.BorderThickness}" Width="120" VerticalAlignment="Center" />
-                                <TextBlock Text="Trennlinie unten" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Rahmen" Style="{StaticResource RowTitle}" />
+                                    <TextBlock Text="Fixiert: Trennlinie unten. Dynamisch: Rahmen rundherum." Style="{StaticResource RowHint}" />
+                                </StackPanel>
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
                             <DockPanel Style="{StaticResource Row}">
                                 <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding Settings.Appearance.BorderColor, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Farbe der Trennlinie" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
+                                <TextBlock Text="Rahmenfarbe" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Nur im dynamischen Modus -->
+                    <Border Style="{StaticResource Card}" Visibility="{Binding DynamicVisibility}">
+                        <StackPanel>
+                            <TextBlock Text="Dynamischer Modus" Style="{StaticResource CardTitle}" />
+                            <TextBlock Style="{StaticResource RowHint}"
+                                       Text="Verschieben: die Leiste an einer freien Stelle oder an der Uhr ziehen. Größe: an den Rändern ziehen oder hier eingeben. Position und Größe werden automatisch gespeichert." />
+                            <DockPanel Style="{StaticResource Row}">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBox Width="90" Text="{Binding Settings.Appearance.Width, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Text="×" VerticalAlignment="Center" Margin="10,0" Opacity="0.7" />
+                                    <TextBox Width="90" Text="{Binding Settings.Appearance.FloatingHeight, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Größe – Breite × Höhe (px)" Style="{StaticResource RowTitle}" />
+                                    <TextBlock Text="Z. B. 200 × 200 für eine freistehende Uhr." Style="{StaticResource RowHint}" />
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource Divider}" />
+                            <DockPanel Style="{StaticResource Row}">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBox Width="90" ToolTip="Abstand vom linken Monitorrand; leer = zentriert"
+                                             Text="{Binding Settings.Appearance.FloatingLeft, UpdateSourceTrigger=PropertyChanged, TargetNullValue=''}" />
+                                    <TextBlock Text="/" VerticalAlignment="Center" Margin="10,0" Opacity="0.7" />
+                                    <TextBox Width="90" ToolTip="Abstand vom oberen Monitorrand"
+                                             Text="{Binding Settings.Appearance.FloatingTop, UpdateSourceTrigger=PropertyChanged, TargetNullValue=''}" />
+                                    <Button Content="Zentrieren" Command="{Binding CenterHorizontallyCommand}" Margin="10,0,0,0" />
+                                </StackPanel>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Position – links / oben (px)" Style="{StaticResource RowTitle}" />
+                                    <TextBlock Text="Relativ zum gewählten Monitor. Links leer = horizontal zentriert." Style="{StaticResource RowHint}" />
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource Divider}" />
+                            <DockPanel Style="{StaticResource Row}">
+                                <ComboBox DockPanel.Dock="Right" ItemsSource="{Binding LayerOptions}" DisplayMemberPath="Display" SelectedValuePath="Value"
+                                          SelectedValue="{Binding Settings.Appearance.Layer}" Width="300" VerticalAlignment="Center" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Ebene" Style="{StaticResource RowTitle}" />
+                                    <TextBlock Text="„Im Hintergrund“ liegt hinter allen Fenstern – wie ein Widget auf dem Desktop." Style="{StaticResource RowHint}" />
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource Divider}" />
+                            <DockPanel Style="{StaticResource Row}">
+                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Settings.Appearance.LockPosition}" VerticalAlignment="Center" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Position sperren" Style="{StaticResource RowTitle}" />
+                                    <TextBlock Text="Verhindert versehentliches Verschieben und Größenändern. Auch per Rechtsklick auf die Leiste umschaltbar." Style="{StaticResource RowHint}" />
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource Divider}" />
+                            <DockPanel Style="{StaticResource Row}">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Slider x:Name="OpacitySlider" Width="220" Minimum="0" Maximum="1" SmallChange="0.05" LargeChange="0.1"
+                                            IsSnapToTickEnabled="True" TickFrequency="0.05"
+                                            Value="{Binding Settings.Appearance.BackgroundOpacity}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Value, ElementName=OpacitySlider, StringFormat={}{0:P0}}" Width="48" TextAlignment="Right"
+                                               VerticalAlignment="Center" Margin="10,0,0,0" />
+                                </StackPanel>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Hintergrund-Deckkraft" Style="{StaticResource RowTitle}" />
+                                    <TextBlock Text="0 % = komplett durchsichtig – dann sind nur die Inhalte (z. B. die Uhr) sichtbar und greifbar, Klicks daneben gehen zum Desktop." Style="{StaticResource RowHint}" />
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource Divider}" />
+                            <DockPanel Style="{StaticResource Row}">
+                                <ComboBox DockPanel.Dock="Right" IsEditable="True" ItemsSource="{Binding CornerRadiusPresets}" Width="120" VerticalAlignment="Center"
+                                          Text="{Binding Settings.Appearance.CornerRadius, UpdateSourceTrigger=PropertyChanged}" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Eckenradius (px)" Style="{StaticResource RowTitle}" />
+                                    <TextBlock Text="0 = eckig. Halbe Höhe = Pillenform, bei quadratischer Größe ein Kreis." Style="{StaticResource RowHint}" />
+                                </StackPanel>
                             </DockPanel>
                         </StackPanel>
                     </Border>
@@ -292,12 +368,6 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource Card}" Opacity="0.55">
-                        <StackPanel>
-                            <TextBlock Text="Schwebender Modus (geplant)" Style="{StaticResource CardTitle}" />
-                            <TextBlock Text="Breite, Abstand, Eckenradius und Transparenz werden bereits gespeichert, wirken aber erst mit dem Floating-Modus in einer späteren Version." Style="{StaticResource RowHint}" />
-                        </StackPanel>
-                    </Border>
                 </StackPanel>
             </ScrollViewer>
 
@@ -566,14 +636,17 @@
                             <TextBlock Text="Betriebsart" Style="{StaticResource CardTitle}" />
                             <DockPanel Style="{StaticResource Row}">
                                 <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Settings.Behavior.AlwaysOnTop}" VerticalAlignment="Center" />
-                                <TextBlock Text="Immer im Vordergrund" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Immer im Vordergrund" Style="{StaticResource RowTitle}" />
+                                    <TextBlock Text="Fixierter Modus. Im dynamischen Modus gilt die Einstellung „Ebene“ unter Darstellung." Style="{StaticResource RowHint}" />
+                                </StackPanel>
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
                             <DockPanel Style="{StaticResource Row}">
                                 <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Settings.Behavior.ReserveScreenSpace}" VerticalAlignment="Center" />
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Bildschirmbereich reservieren" Style="{StaticResource RowTitle}" />
-                                    <TextBlock Text="An: maximierte Fenster beginnen unterhalb der Leiste. Aus: die Leiste liegt über den Fenstern (Overlay)." Style="{StaticResource RowHint}" />
+                                    <TextBlock Text="Nur im fixierten Modus. An: maximierte Fenster beginnen unterhalb der Leiste. Aus: die Leiste liegt über den Fenstern (Overlay)." Style="{StaticResource RowHint}" />
                                 </StackPanel>
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
