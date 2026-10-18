@@ -169,7 +169,7 @@ public sealed class WidgetRowViewModel : ObservableObject
         EditClockCommand = new RelayCommand(() => editClock(this));
         ResetColorsCommand = new RelayCommand(() =>
         {
-            IconColor = DefaultIconColor;
+            IconColor = Is(WidgetType.NetworkTraffic) ? WidgetEntry.DefaultUploadColor : _barForeground;
             LabelColor = _barForeground;
             IndicatorColor = WidgetEntry.DefaultIndicatorColor;
             _iconColorCustom = false;
@@ -311,8 +311,8 @@ public sealed class WidgetRowViewModel : ObservableObject
     /// <summary>Alle Widgets außer der Uhr haben eigene Farben (die Uhr auf der Seite „Uhr &amp; Kalender“).</summary>
     public Visibility ColorsVisibility => IsClock ? Visibility.Collapsed : Visibility.Visible;
 
-    /// <summary>Symbolfarbe: alle Widgets mit Symbol; beim Upload-/Download-Monitor die Uploadfarbe.</summary>
-    private bool HasIconColor => !IsClock && !IsMetric;
+    /// <summary>Symbolfarbe: alle Widgets mit Symbol; beim Upload-/Download-Monitor die Uploadfarbe, bei Mess-Widgets die Bezeichnung.</summary>
+    private bool HasIconColor => !IsClock;
 
     /// <summary>Akzentfarbe: Markierung, Balken, Fortschritt bzw. Download.</summary>
     private bool HasIndicatorColor => IsAudio || IsMetric || Is(WidgetType.Volume) || Is(WidgetType.Timer) || Is(WidgetType.NetworkTraffic);
@@ -321,14 +321,19 @@ public sealed class WidgetRowViewModel : ObservableObject
     public Visibility IndicatorColorVisibility => HasIndicatorColor ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Ohne eigene Symbolfarbe: Schriftfarbe der Leiste, beim Upload die Standard-Uploadfarbe.</summary>
-    private string DefaultIconColor => Is(WidgetType.NetworkTraffic) ? WidgetEntry.DefaultUploadColor : _barForeground;
+    private string DefaultIconColor => Is(WidgetType.NetworkTraffic) ? WidgetEntry.DefaultUploadColor
+        : IsMetric ? _entry.LabelColor ?? _barForeground // Bezeichnung folgt ohne eigene Farbe dem Wert
+        : _barForeground;
 
-    public string IconColorTitle => Is(WidgetType.NetworkTraffic) ? "Uploadfarbe" : "Symbolfarbe";
+    public string IconColorTitle => Is(WidgetType.NetworkTraffic) ? "Uploadfarbe" : IsMetric ? "Bezeichnungsfarbe" : "Symbolfarbe";
+
+    public string LabelColorTitle => IsMetric ? "Wertfarbe" : "Schriftfarbe";
 
     public string IconColorHint => _entry.Type switch
     {
         WidgetType.NetworkTraffic => "Pfeil und Linie im Verlauf.",
         WidgetType.Network => "Bei Verbindung ohne Internetzugriff wird das Symbol orange.",
+        _ when IsMetric => _entry.Type == WidgetType.GpuTemperature ? "Für das Thermometer vor dem Wert." : "Für „CPU“, „GPU“ bzw. „RAM“ vor dem Wert. Ohne eigene Farbe wie die Wertfarbe.",
         _ => "",
     };
 
@@ -343,7 +348,7 @@ public sealed class WidgetRowViewModel : ObservableObject
         WidgetType.Timer => "Für Restzeit und Namen. Abgelaufene Timer werden rot.",
         WidgetType.Stopwatch => "Für die Zeit.",
         WidgetType.NetworkTraffic => "Für die Datenraten.",
-        _ => "Für Wert und Bezeichnung.",
+        _ => "Für den Wert, z. B. „42 %“. Bei hoher Last gelten die Warnfarben.",
     };
 
     public string IndicatorColorTitle => _entry.Type switch

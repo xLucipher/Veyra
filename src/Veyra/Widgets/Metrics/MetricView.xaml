@@ -8,7 +8,7 @@
     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0">
         <TextBlock Text="{Binding Caption}" Visibility="{Binding CaptionVisibility}"
                    FontFamily="{Binding CaptionFontFamily}" FontSize="11" FontWeight="SemiBold"
-                   Foreground="{Binding Foreground}" Opacity="0.65"
+                   Foreground="{Binding CaptionBrush}" Opacity="{Binding CaptionOpacity}"
                    VerticalAlignment="Center" Margin="0,0,6,0" />
         <TextBlock Text="{Binding ValueText}" MinWidth="{Binding ValueMinWidth}" TextAlignment="Left"
                    FontFamily="{Binding FontFamily}" FontSize="13" FontWeight="SemiBold"

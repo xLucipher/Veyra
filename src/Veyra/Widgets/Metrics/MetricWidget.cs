@@ -35,6 +35,8 @@ public sealed class MetricWidget : ObservableObject, IBarWidget
     private Brush _valueBrush = Brushes.White;
     private Brush _accentBrush = Brushes.White;
     private Brush _accentNormal = Brushes.White;
+    private Brush _captionBrush = Brushes.White;
+    private double _captionOpacity = 0.65;
     private Brush _trackBrush = Brushes.Transparent;
     private FontFamily _fontFamily = new("Segoe UI");
     private double _barWidth;
@@ -69,6 +71,11 @@ public sealed class MetricWidget : ObservableObject, IBarWidget
     public string ValueText { get => _valueText; private set => SetProperty(ref _valueText, value); }
     public string ToolTipText { get => _toolTipText; private set => SetProperty(ref _toolTipText, value); }
     public Brush Foreground { get => _foreground; private set => SetProperty(ref _foreground, value); }
+
+    /// <summary>Farbe der Bezeichnung; ohne eigene Farbe = <see cref="Foreground"/>.</summary>
+    public Brush CaptionBrush { get => _captionBrush; private set => SetProperty(ref _captionBrush, value); }
+
+    public double CaptionOpacity { get => _captionOpacity; private set => SetProperty(ref _captionOpacity, value); }
     public Brush ValueBrush { get => _valueBrush; private set => SetProperty(ref _valueBrush, value); }
     public Brush AccentBrush { get => _accentBrush; private set => SetProperty(ref _accentBrush, value); }
     public Brush TrackBrush { get => _trackBrush; private set => SetProperty(ref _trackBrush, value); }
@@ -99,6 +106,9 @@ public sealed class MetricWidget : ObservableObject, IBarWidget
         Foreground = entry?.LabelColor is { } labelColor
             ? ColorUtil.ToBrush(labelColor, Colors.White)
             : ColorUtil.ToBrush(bar.Appearance.ForegroundColor, Colors.White);
+        // Bezeichnung (CPU, GPU, RAM, Thermometer) eigene Farbe – ohne sie wie der Wert, nur etwas zurückgenommen.
+        CaptionBrush = entry?.IconColor is { } captionColor ? ColorUtil.ToBrush(captionColor, Colors.White) : Foreground;
+        CaptionOpacity = entry?.IconColor is null ? 0.65 : 1;
         _accentNormal = ColorUtil.ToBrush(entry?.IndicatorColor ?? WidgetEntry.DefaultIndicatorColor, Colors.DeepSkyBlue);
         TrackBrush = Freeze(new SolidColorBrush(((SolidColorBrush)Foreground).Color) { Opacity = 0.14 });
 

@@ -977,7 +977,7 @@
                                             <DockPanel Style="{StaticResource Row}">
                                                 <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding LabelColor, UpdateSourceTrigger=PropertyChanged}" />
                                                 <StackPanel VerticalAlignment="Center">
-                                                    <TextBlock Text="Schriftfarbe" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="{Binding LabelColorTitle}" Style="{StaticResource RowTitle}" />
                                                     <TextBlock Text="{Binding LabelColorHint}" Style="{StaticResource RowHint}" />
                                                 </StackPanel>
                                             </DockPanel>
