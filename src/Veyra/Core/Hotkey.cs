@@ -22,7 +22,8 @@ public static class HotkeyCapture
 
 /// <summary>
 /// Globales Tastenkürzel, z. B. Strg + Umschalt + I. Gespeichert als "Ctrl+Shift+I" (Namen der WPF-<see cref="Key"/>-Werte),
-/// angezeigt auf Deutsch. Ohne Zusatztaste sind nur Tasten erlaubt, die beim Tippen nicht stören (F1–F24, Pause, Rollen).
+/// angezeigt auf Deutsch. Auch Einzeltasten ohne Zusatztaste sind erlaubt (z. B. "PageUp") – Windows fängt sie dann
+/// allerdings in allen Programmen ab (<see cref="IsSingleKey"/>, <see cref="BlocksTyping"/>).
 /// </summary>
 public sealed record Hotkey(ModifierKeys Modifiers, Key Key)
 {
@@ -54,8 +55,14 @@ public sealed record Hotkey(ModifierKeys Modifiers, Key Key)
         return hotkey.IsValid;
     }
 
-    /// <summary>Kein reines Zusatztasten-Kürzel; ohne Zusatztaste nur Funktions- und Sondertasten.</summary>
-    public bool IsValid => Key != Key.None && !IsModifierKey(Key) && (Modifiers != ModifierKeys.None || IsStandaloneKey(Key));
+    /// <summary>Kein reines Zusatztasten-Kürzel. Jede andere Taste ist erlaubt, auch allein.</summary>
+    public bool IsValid => Key != Key.None && !IsModifierKey(Key);
+
+    /// <summary>Ohne Strg/Alt/Umschalt/Win: Die Taste löst in allen Programmen nur noch diese Aktion aus.</summary>
+    public bool IsSingleKey => Modifiers == ModifierKeys.None;
+
+    /// <summary>Taste (ggf. mit Umschalt), die zum Schreiben gebraucht wird – global belegt stört sie jede Texteingabe.</summary>
+    public bool BlocksTyping => (Modifiers is ModifierKeys.None or ModifierKeys.Shift) && IsTypingKey(Key);
 
     /// <summary>Virtuelle Tastennummer und MOD_*-Flags für RegisterHotKey.</summary>
     public uint VirtualKey => (uint)KeyInterop.VirtualKeyFromKey(Key);
@@ -77,7 +84,10 @@ public sealed record Hotkey(ModifierKeys Modifiers, Key Key)
     public static bool IsModifierKey(Key key) => key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
         or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin;
 
-    private static bool IsStandaloneKey(Key key) => key is >= Key.F1 and <= Key.F24 or Key.Pause or Key.Scroll;
+    private static bool IsTypingKey(Key key) =>
+        key is >= Key.A and <= Key.Z or >= Key.D0 and <= Key.D9 or >= Key.NumPad0 and <= Key.NumPad9
+            or Key.Space or Key.Return or Key.Tab or Key.Back or Key.Multiply or Key.Add or Key.Subtract or Key.Divide or Key.Decimal
+        || key.ToString().StartsWith("Oem", StringComparison.Ordinal);
 
     private static string KeyDisplay(Key key) => key switch
     {

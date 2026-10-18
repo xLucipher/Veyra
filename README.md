@@ -47,7 +47,7 @@ Es sind keine Administratorrechte nötig. Veyra erscheint wie jedes andere Progr
 | Rechtsklick auf das Lautstärke-Widget | stumm schalten bzw. Stummschaltung aufheben |
 | Klick auf einen abgelaufenen Timer | Alarm beenden |
 | Leertaste / R / Entf im Stoppuhr-Popup | Start/Pause / Runde / Zurücksetzen |
-| Tastenkürzel von Lautstärke, Timer oder Stoppuhr | lauter/leiser (gedrückt halten wiederholt), stumm; Timer bzw. Stoppuhr starten/pausieren, Runde, zurücksetzen – global, auch im Spiel (festlegen unter *Einstellungen → Widgets*) |
+| Tastenkürzel von Lautstärke, Timer oder Stoppuhr | lauter/leiser (gedrückt halten wiederholt), stumm; Timer bzw. Stoppuhr starten/pausieren, Runde, zurücksetzen – global, auch im Spiel; Kombination oder einzelne Taste wie *Bild auf* (festlegen unter *Einstellungen → Widgets*) |
 | Tastenkürzel eines Audio-Widgets | nächstes Gerät dieses Widgets als Standard (von links nach rechts, festlegen unter *Einstellungen → Widgets*) |
 | Widget ziehen (außer Uhr) | Position auf der Leiste ändern |
 | Dynamische Leiste ziehen / an den Rändern ziehen | verschieben / Größe ändern (sperrbar per Rechtsklick) |

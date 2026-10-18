@@ -398,10 +398,16 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         var all = thisBar.Concat(otherBars).OfType<string>().ToList();
         var ownRegistered = _service.Current.Bars.SelectMany(b => b.Widgets).SelectMany(EntryHotkeys).OfType<string>().ToHashSet();
 
-        string Warning(string? hotkey) => hotkey is null ? ""
-            : all.Count(h => h == hotkey) > 1 ? "Dieses Tastenkürzel ist bei einem anderen Widget bzw. einer anderen Aktion schon vergeben."
-            : !ownRegistered.Contains(hotkey) && !IsHotkeyAvailable(hotkey) ? "Dieses Tastenkürzel ist bereits von Windows oder einem anderen Programm belegt."
-            : "";
+        string Warning(string? hotkey)
+        {
+            if (hotkey is null || !Hotkey.TryParse(hotkey, out var parsed)) return "";
+            if (all.Count(h => h == hotkey) > 1) return "Dieses Tastenkürzel ist bei einem anderen Widget bzw. einer anderen Aktion schon vergeben.";
+            if (!ownRegistered.Contains(hotkey) && !IsHotkeyAvailable(hotkey)) return "Dieses Tastenkürzel ist bereits von Windows oder einem anderen Programm belegt.";
+            // Globale Kürzel fängt Windows in allen Programmen ab – bei Einzeltasten fällt das auf.
+            if (parsed.BlocksTyping) return "Diese Taste wird zum Schreiben gebraucht und funktioniert dann in keinem Programm mehr normal – besser mit Strg, Alt oder Win kombinieren.";
+            if (parsed.IsSingleKey) return "Einzeltaste: Sie löst dann in allen Programmen nur noch diese Aktion aus (z. B. blättert „Bild auf“ im Browser nicht mehr).";
+            return "";
+        }
 
         foreach (var row in WidgetRows.Where(r => r.IsAudio)) row.HotkeyWarning = Warning(row.Hotkey);
         foreach (var action in WidgetRows.SelectMany(r => r.HotkeyActions)) action.HotkeyWarning = Warning(action.Hotkey);

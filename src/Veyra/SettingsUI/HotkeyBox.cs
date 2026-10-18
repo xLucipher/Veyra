@@ -6,7 +6,8 @@ using Veyra.Core;
 namespace Veyra.SettingsUI;
 
 /// <summary>
-/// Eingabefeld für ein Tastenkürzel: hineinklicken und die Kombination drücken. Rücktaste/Entf ohne Zusatztaste
+/// Eingabefeld für ein Tastenkürzel: hineinklicken und die Kombination oder eine einzelne Taste (z. B. Bild auf) drücken.
+/// Rücktaste/Entf ohne Zusatztaste
 /// löscht das Kürzel, Tab wechselt wie gewohnt zum nächsten Feld. <see cref="Hotkey"/> ist das Speicherformat
 /// ("Ctrl+Shift+I"), angezeigt wird die deutsche Schreibweise.
 /// </summary>
@@ -26,7 +27,7 @@ public sealed class HotkeyBox : TextBox
         IsUndoEnabled = false;
         ContextMenu = null;
         Cursor = Cursors.Hand;
-        ToolTip = "Hineinklicken und die Tastenkombination drücken. Rücktaste oder Entf löscht.";
+        ToolTip = "Hineinklicken und eine Tastenkombination oder eine einzelne Taste drücken. Rücktaste oder Entf löscht.";
         ShowHotkey();
     }
 
@@ -40,7 +41,7 @@ public sealed class HotkeyBox : TextBox
     {
         base.OnGotKeyboardFocus(e);
         HotkeyCapture.Set(true);
-        Text = "Tastenkombination drücken …";
+        Text = "Taste oder Kombination drücken …";
     }
 
     protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e)
@@ -70,7 +71,7 @@ public sealed class HotkeyBox : TextBox
         var hotkey = new Hotkey(modifiers, key);
         if (!hotkey.IsValid)
         {
-            Text = "Bitte mit Strg, Alt, Umschalt oder Win kombinieren";
+            Text = "Diese Taste lässt sich nicht belegen";
             return;
         }
         Hotkey = hotkey.ToString();

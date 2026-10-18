@@ -670,7 +670,7 @@
                                                 <ui:HotkeyBox DockPanel.Dock="Right" Width="240" VerticalAlignment="Center" Hotkey="{Binding Hotkey}" />
                                                 <StackPanel VerticalAlignment="Center">
                                                     <TextBlock Text="Tastenkürzel" Style="{StaticResource RowTitle}" />
-                                                    <TextBlock Text="Wechselt bei jedem Druck zum nächsten Gerät dieses Widgets (von links nach rechts) – auch in Spielen. Rücktaste oder Entf löscht." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="Wechselt bei jedem Druck zum nächsten Gerät dieses Widgets (von links nach rechts) – auch in Spielen. Auch eine einzelne Taste ist möglich; Rücktaste oder Entf löscht." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
                                                     <TextBlock Text="{Binding HotkeyWarning}" Visibility="{Binding HotkeyWarningVisibility}" Foreground="#FDBC4B" TextWrapping="Wrap" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </DockPanel>
@@ -947,7 +947,7 @@
                                         <StackPanel Visibility="{Binding HotkeyActionsVisibility}" Margin="40,6,0,0">
                                             <Border Style="{StaticResource Divider}" />
                                             <TextBlock Text="Tastenkürzel" Style="{StaticResource RowTitle}" Margin="0,8,0,0" />
-                                            <TextBlock Text="Global – funktionieren auch in Spielen und während die Leiste bei Vollbild ausgeblendet ist. Hineinklicken und die Kombination drücken, Rücktaste oder Entf löscht." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                            <TextBlock Text="Global – funktionieren auch in Spielen und während die Leiste bei Vollbild ausgeblendet ist. Hineinklicken und eine Kombination oder eine einzelne Taste (z. B. Bild auf) drücken, Rücktaste oder Entf löscht." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
                                             <ItemsControl ItemsSource="{Binding HotkeyActions}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
