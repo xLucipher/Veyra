@@ -1,0 +1,33 @@
+<UserControl x:Class="Veyra.Widgets.Metrics.MetricView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Focusable="False"
+             Background="Transparent"
+             ToolTip="{Binding ToolTipText}">
+    <!-- Kurzbezeichnung · Wert (Tabellenziffern, feste Mindestbreite → nichts wackelt) · Balken oder Verlauf -->
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0">
+        <TextBlock Text="{Binding Caption}" Visibility="{Binding CaptionVisibility}"
+                   FontFamily="{Binding CaptionFontFamily}" FontSize="11" FontWeight="SemiBold"
+                   Foreground="{Binding Foreground}" Opacity="0.65"
+                   VerticalAlignment="Center" Margin="0,0,6,0" />
+        <TextBlock Text="{Binding ValueText}" MinWidth="{Binding ValueMinWidth}" TextAlignment="Left"
+                   FontFamily="{Binding FontFamily}" FontSize="13" FontWeight="SemiBold"
+                   Foreground="{Binding ValueBrush}" VerticalAlignment="Center"
+                   Typography.NumeralAlignment="Tabular" />
+
+        <!-- Füllbalken -->
+        <Border Visibility="{Binding BarVisibility}" Width="{Binding TrackWidth}" Height="5" CornerRadius="2.5"
+                Background="{Binding TrackBrush}" VerticalAlignment="Center" Margin="8,0,0,0">
+            <Border Width="{Binding BarWidth}" HorizontalAlignment="Left" CornerRadius="2.5" Background="{Binding AccentBrush}" />
+        </Border>
+
+        <!-- Verlauf der letzten Minute -->
+        <Border Visibility="{Binding GraphVisibility}" Width="{Binding TrackWidth}" Height="18" CornerRadius="3"
+                Background="{Binding TrackBrush}" VerticalAlignment="Center" Margin="8,0,0,0" ClipToBounds="True">
+            <Canvas Width="{Binding TrackWidth}" Height="18">
+                <Polygon Points="{Binding GraphArea}" Fill="{Binding AccentBrush}" Opacity="0.3" />
+                <Polyline Points="{Binding GraphLine}" Stroke="{Binding AccentBrush}" StrokeThickness="1.2" StrokeLineJoin="Round" />
+            </Canvas>
+        </Border>
+    </StackPanel>
+</UserControl>

@@ -14,20 +14,22 @@ internal static class WindowInspector
     }
 
     /// <summary>Prozessname ohne ".exe" oder null, wenn der Prozess nicht abgefragt werden darf (z. B. geschützte Anti-Cheat-Prozesse).</summary>
-    public static unsafe string? GetProcessName(IntPtr hwnd)
+    public static string? GetProcessName(IntPtr hwnd)
     {
         GetWindowThreadProcessId(hwnd, out uint pid);
-        if (pid == 0) return null;
+        return pid == 0 ? null : GetProcessImagePath(pid) is { } path ? Path.GetFileNameWithoutExtension(path) : null;
+    }
 
+    /// <summary>Vollständiger Pfad der EXE eines Prozesses oder null, wenn er nicht abgefragt werden darf.</summary>
+    public static unsafe string? GetProcessImagePath(uint pid)
+    {
         IntPtr process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
         if (process == IntPtr.Zero) return null;
         try
         {
             char* buffer = stackalloc char[1024];
             int size = 1024;
-            return QueryFullProcessImageNameW(process, 0, buffer, ref size)
-                ? Path.GetFileNameWithoutExtension(new string(buffer, 0, size))
-                : null;
+            return QueryFullProcessImageNameW(process, 0, buffer, ref size) ? new string(buffer, 0, size) : null;
         }
         finally
         {

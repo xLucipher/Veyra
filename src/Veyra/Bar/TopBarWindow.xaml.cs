@@ -82,6 +82,28 @@ public partial class TopBarWindow : Window
 
     public event EventHandler? AppBarPositionChanged;
 
+    /// <summary>Ein mit <see cref="RegisterHotkey"/> angemeldetes globales Tastenkürzel wurde gedrückt (ID).</summary>
+    public event EventHandler<int>? HotkeyPressed;
+
+    private readonly HashSet<int> _hotkeyIds = [];
+
+    /// <summary>Meldet ein globales Tastenkürzel an. False, wenn es schon von einem anderen Programm belegt ist.</summary>
+    /// <param name="repeat">Gedrückt halten löst wiederholt aus (z. B. Lauter/Leiser); sonst nur einmal je Druck.</param>
+    public bool RegisterHotkey(int id, Veyra.Core.Hotkey hotkey, bool repeat = false)
+    {
+        if (Handle == IntPtr.Zero) return false;
+        if (!RegisterHotKey(Handle, id, hotkey.NativeModifiers | (repeat ? 0 : MOD_NOREPEAT), hotkey.VirtualKey)) return false;
+        _hotkeyIds.Add(id);
+        return true;
+    }
+
+    public void UnregisterHotkeys()
+    {
+        if (Handle != IntPtr.Zero)
+            foreach (int id in _hotkeyIds) UnregisterHotKey(Handle, id);
+        _hotkeyIds.Clear();
+    }
+
     protected override void OnSourceInitialized(EventArgs e)
     {
         Handle = new WindowInteropHelper(this).Handle;
@@ -103,6 +125,7 @@ public partial class TopBarWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        UnregisterHotkeys();
         AppBar?.Unregister();
         if (_shellHookRegistered) DeregisterShellHookWindow(Handle);
         if (_sessionNotificationRegistered) WTSUnRegisterSessionNotification(Handle);
@@ -370,6 +393,11 @@ public partial class TopBarWindow : Window
                     // WPF verarbeitet die DPI-Änderung selbst; danach positionieren wir neu.
                     Dispatcher.BeginInvoke(DispatcherPriority.Background,
                         () => DisplayConfigurationChanged?.Invoke(this, EventArgs.Empty));
+                    break;
+
+                case WM_HOTKEY:
+                    HotkeyPressed?.Invoke(this, (int)wParam.ToInt64());
+                    handled = true;
                     break;
 
                 case WM_TIMECHANGE:

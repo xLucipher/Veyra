@@ -1,0 +1,33 @@
+<UserControl x:Class="Veyra.Widgets.Network.TrafficView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Focusable="False"
+             Background="Transparent"
+             ToolTip="{Binding ToolTipText}">
+    <!-- Verlauf (Download als Fläche, Upload als Linie) · ↓ Download · ↑ Upload – Tabellenziffern und Mindestbreite gegen Springen -->
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0">
+        <Border Visibility="{Binding GraphVisibility}" Width="{Binding GraphWidthValue}" Height="{Binding GraphHeightValue}" CornerRadius="3"
+                Background="{Binding TrackBrush}" VerticalAlignment="Center" Margin="0,0,8,0" ClipToBounds="True">
+            <Canvas Width="{Binding GraphWidthValue}" Height="{Binding GraphHeightValue}">
+                <Polygon Points="{Binding DownArea}" Fill="{Binding DownBrush}" Opacity="0.35" />
+                <Polyline Points="{Binding UpLine}" Stroke="{Binding UpBrush}" StrokeThickness="1.2" StrokeLineJoin="Round" />
+            </Canvas>
+        </Border>
+        <StackPanel Orientation="{Binding Orientation}" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Visibility="{Binding DownVisibility}">
+                <TextBlock Text="&#xE896;" FontFamily="{StaticResource WidgetIconFont}" FontSize="11" Foreground="{Binding DownBrush}"
+                           VerticalAlignment="Center" Margin="0,0,4,0" />
+                <TextBlock Text="{Binding DownText}" MinWidth="{Binding ValueMinWidth}" FontFamily="{Binding FontFamily}" FontSize="12.5"
+                           FontWeight="SemiBold" Foreground="{Binding Foreground}" VerticalAlignment="Center"
+                           Typography.NumeralAlignment="Tabular" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Visibility="{Binding UpVisibility}" Margin="{Binding UpMargin}">
+                <TextBlock Text="&#xE898;" FontFamily="{StaticResource WidgetIconFont}" FontSize="11" Foreground="{Binding UpBrush}"
+                           VerticalAlignment="Center" Margin="0,0,4,0" />
+                <TextBlock Text="{Binding UpText}" MinWidth="{Binding ValueMinWidth}" FontFamily="{Binding FontFamily}" FontSize="12.5"
+                           FontWeight="SemiBold" Foreground="{Binding Foreground}" VerticalAlignment="Center"
+                           Typography.NumeralAlignment="Tabular" />
+            </StackPanel>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

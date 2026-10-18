@@ -113,8 +113,107 @@ internal interface IPolicyConfig
     [PreserveSig] int SetEndpointVisibility([MarshalAs(UnmanagedType.LPWStr)] string deviceId, int visible);
 }
 
+/// <summary>Lautstärke und Stummschaltung eines Endpunkts. Nur die benötigten Methoden sind typisiert, die Reihenfolge (VTable) ist vollständig.</summary>
+[ComImport, Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioEndpointVolume
+{
+    [PreserveSig] int RegisterControlChangeNotify(IAudioEndpointVolumeCallback notify);
+    [PreserveSig] int UnregisterControlChangeNotify(IAudioEndpointVolumeCallback notify);
+    [PreserveSig] int GetChannelCount(out uint count);
+    [PreserveSig] int SetMasterVolumeLevel(float levelDb, ref Guid eventContext);
+    [PreserveSig] int SetMasterVolumeLevelScalar(float level, ref Guid eventContext);
+    [PreserveSig] int GetMasterVolumeLevel(out float levelDb);
+    [PreserveSig] int GetMasterVolumeLevelScalar(out float level);
+    [PreserveSig] int SetChannelVolumeLevel(uint channel, float levelDb, ref Guid eventContext);
+    [PreserveSig] int SetChannelVolumeLevelScalar(uint channel, float level, ref Guid eventContext);
+    [PreserveSig] int GetChannelVolumeLevel(uint channel, out float levelDb);
+    [PreserveSig] int GetChannelVolumeLevelScalar(uint channel, out float level);
+    [PreserveSig] int SetMute([MarshalAs(UnmanagedType.Bool)] bool mute, ref Guid eventContext);
+    [PreserveSig] int GetMute([MarshalAs(UnmanagedType.Bool)] out bool mute);
+}
+
+[ComImport, Guid("657804FA-D6AD-4496-8A60-352752AF4F89"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioEndpointVolumeCallback
+{
+    /// <param name="notifyData">AUDIO_VOLUME_NOTIFICATION_DATA: Guid (16), BOOL bMuted (4), float fMasterVolume (4), …</param>
+    [PreserveSig] int OnNotify(IntPtr notifyData);
+}
+
+// ---- Audio-Sitzungen (Lautstärke je App) ------------------------------------------------------
+
+[ComImport, Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioSessionManager2
+{
+    [PreserveSig] int GetAudioSessionControl(IntPtr sessionGuid, uint streamFlags, out IntPtr sessionControl);
+    [PreserveSig] int GetSimpleAudioVolume(IntPtr sessionGuid, uint streamFlags, out IntPtr audioVolume);
+    [PreserveSig] int GetSessionEnumerator(out IAudioSessionEnumerator sessionEnum);
+    [PreserveSig] int RegisterSessionNotification(IAudioSessionNotification notification);
+    [PreserveSig] int UnregisterSessionNotification(IAudioSessionNotification notification);
+}
+
+[ComImport, Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioSessionEnumerator
+{
+    [PreserveSig] int GetCount(out int count);
+    [PreserveSig] int GetSession(int index, out IAudioSessionControl2 session);
+}
+
+/// <summary>IAudioSessionControl samt Erweiterung IAudioSessionControl2 (geerbte Methoden zuerst, VTable-Reihenfolge).</summary>
+[ComImport, Guid("bfb7ff88-7239-4fc9-8fa2-07c950be9c6d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioSessionControl2
+{
+    [PreserveSig] int GetState(out int state);
+    [PreserveSig] int GetDisplayName([MarshalAs(UnmanagedType.LPWStr)] out string name);
+    [PreserveSig] int SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string name, ref Guid eventContext);
+    [PreserveSig] int GetIconPath([MarshalAs(UnmanagedType.LPWStr)] out string path);
+    [PreserveSig] int SetIconPath([MarshalAs(UnmanagedType.LPWStr)] string path, ref Guid eventContext);
+    [PreserveSig] int GetGroupingParam(out Guid groupingParam);
+    [PreserveSig] int SetGroupingParam(ref Guid groupingParam, ref Guid eventContext);
+    [PreserveSig] int RegisterAudioSessionNotification(IAudioSessionEvents events);
+    [PreserveSig] int UnregisterAudioSessionNotification(IAudioSessionEvents events);
+    // IAudioSessionControl2
+    [PreserveSig] int GetSessionIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string id);
+    [PreserveSig] int GetSessionInstanceIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string id);
+    [PreserveSig] int GetProcessId(out uint processId);
+    /// <returns>S_OK (0) = Systemklänge, S_FALSE (1) = normale Sitzung.</returns>
+    [PreserveSig] int IsSystemSoundsSession();
+}
+
+[ComImport, Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface ISimpleAudioVolume
+{
+    [PreserveSig] int SetMasterVolume(float level, ref Guid eventContext);
+    [PreserveSig] int GetMasterVolume(out float level);
+    [PreserveSig] int SetMute([MarshalAs(UnmanagedType.Bool)] bool mute, ref Guid eventContext);
+    [PreserveSig] int GetMute([MarshalAs(UnmanagedType.Bool)] out bool mute);
+}
+
+[ComImport, Guid("641DD20B-4D41-49CC-ABA3-174B9477BB08"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioSessionNotification
+{
+    [PreserveSig] int OnSessionCreated(IAudioSessionControl2 newSession);
+}
+
+[ComImport, Guid("24918ACC-64B3-37C1-8CA9-74A66E9957A8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioSessionEvents
+{
+    [PreserveSig] int OnDisplayNameChanged([MarshalAs(UnmanagedType.LPWStr)] string name, ref Guid eventContext);
+    [PreserveSig] int OnIconPathChanged([MarshalAs(UnmanagedType.LPWStr)] string path, ref Guid eventContext);
+    [PreserveSig] int OnSimpleVolumeChanged(float level, [MarshalAs(UnmanagedType.Bool)] bool mute, ref Guid eventContext);
+    [PreserveSig] int OnChannelVolumeChanged(uint channelCount, IntPtr channelVolumes, uint changedChannel, ref Guid eventContext);
+    [PreserveSig] int OnGroupingParamChanged(ref Guid groupingParam, ref Guid eventContext);
+    [PreserveSig] int OnStateChanged(int state);
+    [PreserveSig] int OnSessionDisconnected(int reason);
+}
+
 internal static class CoreAudioNative
 {
+    public static readonly Guid IID_IAudioSessionManager2 = typeof(IAudioSessionManager2).GUID;
+    public const int AudioSessionStateExpired = 2;
+
+    public const uint CLSCTX_ALL = 0x17;
+    public static readonly Guid IID_IAudioEndpointVolume = typeof(IAudioEndpointVolume).GUID;
+
     public const uint DEVICE_STATE_ACTIVE = 0x1;
     public const uint STGM_READ = 0x0;
     public const ushort VT_LPWSTR = 31;

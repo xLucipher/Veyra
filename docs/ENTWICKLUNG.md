@@ -38,6 +38,7 @@ src/Veyra/
 ├─ App.xaml(.cs)              Einstieg: Einzelinstanz, Logging, Konfiguration, Fehlerbehandlung
 ├─ Bar/                       Taskleistenfenster und UI
 │  ├─ BarManager.cs           alle Leisten: je Eintrag in `Bars` ein BarController, Hinzufügen/Entfernen zur Laufzeit
+│  ├─ WidgetServices.cs       gemeinsame Datenquellen der Widgets (erst bei Bedarf erzeugt, von allen Leisten geteilt)
 │  ├─ BarController.cs        eine Leiste: Fenster/Widgets erzeugen, positionieren, Systemereignisse, eigene Vollbild-Erkennung
 │  ├─ TopBarWindow.xaml(.cs)  WPF-Fenster + Win32-Belange (Stile, WndProc, SetWindowPos)
 │  ├─ TopBarViewModel.cs      Darstellung und Kontextmenü-Befehle
@@ -46,9 +47,17 @@ src/Veyra/
 │  └─ AppBarRegistration.cs   SHAppBarMessage: Benachrichtigungen + optionale Bereichsreservierung
 ├─ Widgets/                   Widgets der Leiste
 │  ├─ IBarWidget.cs           Vertrag: View, ApplySettings, Start/Stop (pausiert bei Vollbild), Refresh
+│  ├─ FlyoutWindow.cs         Basis aller Widget-Popups: Platzierung unter/über dem Widget, Schließen bei Klick daneben oder Esc
 │  ├─ Clock/                  Uhr (ClockWidget, ClockView) und Kalender-Flyout
-│  └─ Audio/                  Audiogeräte-Buttons (Wiedergabe/Mikrofon)
-├─ Audio/                     Core Audio per COM: Geräte auflisten, Standardgerät setzen, Änderungen melden
+│  ├─ Audio/                  Audiogeräte-Buttons (Wiedergabe/Mikrofon)
+│  ├─ Metrics/                CPU, GPU, RAM, GPU-Temperatur: Wert, Balken oder Verlauf
+│  ├─ Network/                Netzwerk (Verbindung + Detail-Popup) und Upload-/Download-Monitor
+│  ├─ Volume/                 Lautstärke: Mausrad, Regler-Popup, Stummschalten
+│  └─ Timers/                 Timer und Stoppuhr samt Popups
+├─ Audio/                     Core Audio per COM: Geräte auflisten, Standardgerät setzen, Änderungen melden; VolumeService: Endpunkt-Lautstärke (IAudioEndpointVolume)
+├─ Network/                   NetworkStatusService (Verbindung, WLAN, Konnektivität), NetworkTrafficMonitor (Byte-Zähler), Interop (iphlpapi, wlanapi, Netzwerkliste)
+├─ Timing/                    TimerService: Zustand aller Timer und Stoppuhren, ein Zeitgeber auf den nächsten Ablauf
+├─ Sensors/                   Systemwerte ohne Zusatzsoftware: GetSystemTimes, GlobalMemoryStatusEx, PDH (GPU), DXGI, D3DKMT (GPU-Temperatur)
 ├─ Updates/                   Update-Prüfung über GitHub Releases, Update-Fenster, Installation
 ├─ Assets/                    App-Icon und Logo (erzeugt aus assets/branding)
 ├─ Fullscreen/                Vollbild-Erkennung
@@ -81,6 +90,13 @@ Bewusst flach gehalten: keine DI-Container, keine Service-Locator, keine Abstrak
 | Sperren/Entsperren, Standby | `WTSRegisterSessionNotification`, `WM_POWERBROADCAST` | nach Entsperren/Aufwachen neu positionieren und neu bewerten |
 | Systemzeit/Zeitzone | `WM_TIMECHANGE` | Uhr sofort aktualisieren |
 | Fenster-Optik | `DwmSetWindowAttribute` (keine runden Ecken, von „Desktop anzeigen“-Peek ausgenommen) | |
+| Lautstärke | `IAudioEndpointVolume` (`SetMasterVolumeLevelScalar`, `SetMute`, `RegisterControlChangeNotify`) | jede Änderung – auch durch Lautstärketasten oder andere Programme – kommt als Rückruf, kein Abfragen |
+| Lautstärke je App | `IAudioSessionManager2` (`GetSessionEnumerator`, `RegisterSessionNotification`), `IAudioSessionControl2`, `ISimpleAudioVolume`, `IAudioSessionEvents`; Namen über `SHLoadIndirectString` bzw. Dateibeschreibung, Symbole über `ExtractIconEx` | nur solange das Regler-Popup offen ist; neue Apps und Änderungen im Windows-Mixer kommen als Ereignis |
+| Tastenkürzel | `RegisterHotKey` (mit `MOD_NOREPEAT`, außer bei Lauter/Leiser) | Audio-Widgets: `Hotkey`; Lautstärke, Timer, Stoppuhr: `Hotkeys` je Aktion; wirken auch bei ausgeblendeter Leiste |
+| Netzwerkverbindung | `GetBestInterface` (Schnittstelle der Standardroute), `NotifyAddrChange` (über `NetworkChange`), `NotifyNetworkConnectivityHintChange`, `GetAdaptersAddresses` (über `NetworkInterface`) | ereignisbasiert; Internetzugang wie in der Windows-Taskleiste |
+| WLAN | `WlanQueryInterface` (SSID, Signal, Raten, Standard, Kanal), `WlanRegisterNotification` (Verbindung, Signaländerung) | ab Windows 11 24H2 nur mit Standortzugriff für Desktop-Apps – sonst Name aus der Netzwerkliste (`INetworkListManager`, COM) |
+| Datenrate | `GetIfTable2` (ein Aufruf je Messung, Filter-Schnittstellen werden nicht doppelt gezählt) | nur solange ein sichtbares Widget misst; Intervall = kürzestes angefordertes |
+| Benachrichtigung, Signalton | `Shell_NotifyIcon` (`NIF_INFO`, Symbol nur während der Anzeige), `PlaySound` mit Ereignisnamen des Soundschemas | erscheint als Windows-Benachrichtigung samt Mitteilungszentrale, respektiert „Nicht stören“; keine WinRT-/NuGet-Abhängigkeit |
 
 ---
 
@@ -105,7 +121,7 @@ Ereignis-Salven werden in einem 40-ms-Fenster zu einer Auswertung zusammengefass
 
 **Flackerschutz:** Ausblenden passiert sofort (die Leiste liegt nie sichtbar über einem Spiel), Einblenden erst, wenn „kein Vollbild“ 300 ms stabil ist. Alt+Tab-Umschalter und Startmenü werden übersprungen, sodass das darunterliegende Spiel weiter erkannt wird.
 
-**Gaming-Verhalten:** Während die Leiste ausgeblendet ist, ist auch der Uhr-Timer gestoppt; es laufen nur noch die Ereignis-Hooks und die 2-s-Sicherheitsprüfung (wenige Mikrosekunden). Mit Software-Rendering (Standard) nutzt die Leiste die GPU überhaupt nicht.
+**Gaming-Verhalten:** Während die Leiste ausgeblendet ist, sind alle Widgets angehalten (Uhr-Timer, Messungen, Netzwerk- und Lautstärke-Benachrichtigungen abgemeldet) – nur ein laufender Timer meldet seinen Ablauf weiterhin über einen einzigen Zeitgeber; es laufen nur noch die Ereignis-Hooks und die 2-s-Sicherheitsprüfung (wenige Mikrosekunden). Mit Software-Rendering (Standard) nutzt die Leiste die GPU überhaupt nicht.
 
 ### Bekannte Einschränkungen
 
@@ -177,7 +193,7 @@ Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwe
 |---|---|---|---|
 | Bars[] | `Id`, `Name` | *(automatisch)*, `Leiste N` | eine Leiste = ein eigenes Fenster; es gibt immer mindestens eine |
 | | `MonitorSelection` | `Primary` | oder Gerätename, z. B. `\\.\DISPLAY2` (siehe Einstellungen → Monitore) |
-| | `Widgets` | Uhr + Audio | Widgets dieser Leiste (Typ, Bereich, Positionen, Geräte); Uhren mit eigenem `Clock`, Audio-Widgets mit `IconColor`/`LabelColor` (leer = `ForegroundColor` der Leiste) und `IndicatorColor` (Strich unter dem Standardgerät, leer = `#3DAEE9`) |
+| | `Widgets` | Uhr + Audio | Widgets dieser Leiste (Typ, Bereich, Positionen, Geräte); Uhren mit eigenem `Clock`, Audio-Widgets mit `IconColor`/`LabelColor` (leer = `ForegroundColor` der Leiste), `IndicatorColor` (Strich unter dem Standardgerät, leer = `#3DAEE9`) und `Hotkey` (globales Tastenkürzel zum Durchschalten der Geräte, z. B. `Ctrl+Shift+I`); Mess-Widgets (`Cpu`, `Gpu`, `Ram`, `GpuTemperature`) mit `Metric` (`Style`: `Value`/`Bar`/`Graph`, `ShowCaption`, `WarnColors`, `ShowAmount` für RAM in GB, `Gpu` = Name der Grafikkarte, leer = automatisch) sowie `LabelColor`/`IndicatorColor` für Schrift und Balken; `Network` mit `Network` (`ShowName`, `ShowSignal`, `ShowSettingsButton`); `Volume` mit `Volume` (`Flow`: `Output`/`Input`, `ShowPercent`, `ShowBar`, `WheelStep` in %, `RightClickMutes`, `ShowApps` = Lautstärke je App im Regler); `Timer` mit `Timer` (`Timers[]` aus `Id`, `Name`, `DurationSeconds`; `ShowAllActive`, `ShowName`, `ShowProgress`, `Notify`, `Sound`: `Alarm`/`Notification`/`Reminder`/`None`); `Stopwatch` mit `Stopwatch` (`ShowMilliseconds`, `AlwaysShowHours`, `EnableLaps`); `NetworkTraffic` mit `Traffic` (`Direction`: `Both`/`Download`/`Upload`, `Stacked`, `ShowGraph`, `UseBits`, `Adapter` = Adapter-GUID, leer = alle, `IntervalMs` 250–10000). Farben dieser Widgets: `IconColor` (Symbol; beim Datenraten-Monitor Upload, leer = `#E8A23B`), `LabelColor` (Text), `IndicatorColor` (Balken, Timer-Fortschritt bzw. Download). Tastenkürzel dieser Widgets in `Hotkeys` je Aktion: Lautstärke `VolumeUp`, `VolumeDown`, `Mute`; Timer `StartPause`, `Reset`; Stoppuhr `StartPause`, `Lap`, `Reset` (z. B. `{ "VolumeUp": "Ctrl+Alt+Up" }`). Laufende Timer und Stoppuhren werden nicht gespeichert |
 | Bars[].Appearance | `Mode` | `FullWidth` | `FullWidth` = fixiert (oben, volle Breite) · `Floating` = dynamisch (frei beweglich) |
 | | `Height` | `48` | Höhe in geräteunabhängigen Pixeln (×1,5 bei 150 % Skalierung) |
 | | `BackgroundColor` | `#202127` | `#RGB`, `#RRGGBB`, `#AARRGGBB` |

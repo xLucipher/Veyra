@@ -44,6 +44,10 @@ internal static class NativeMethods
     public const int WM_POWERBROADCAST = 0x0218;
     public const int WM_WTSSESSION_CHANGE = 0x02B1;
     public const int WM_DPICHANGED = 0x02E0;
+    public const int WM_HOTKEY = 0x0312;
+
+    /// <summary>RegisterHotKey: gedrückt gehaltene Taste nicht wiederholt melden.</summary>
+    public const uint MOD_NOREPEAT = 0x4000;
 
     public const int MA_NOACTIVATE = 3;
     public const int WTS_SESSION_UNLOCK = 0x8;
@@ -176,6 +180,17 @@ internal static class NativeMethods
     public delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
 
     // ---- user32 ---------------------------------------------------------------------------
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    [DllImport("user32.dll")]
+    public static extern uint MapVirtualKeyW(uint uCode, uint uMapType);
+
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
 

@@ -1,0 +1,88 @@
+<w:FlyoutWindow x:Class="Veyra.Widgets.Volume.VolumeFlyout"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:w="clr-namespace:Veyra.Widgets"
+        Title="Lautstärke"
+        ThemeMode="Dark"
+        Width="340"
+        Background="#2A2B32">
+    <Border Style="{StaticResource FlyoutFrame}">
+        <StackPanel>
+            <TextBlock Text="{Binding FlowTitle}" Style="{StaticResource FlyoutTitle}" />
+            <TextBlock Text="{Binding DeviceName}" Style="{StaticResource FlyoutSubtitle}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+
+            <!-- Stumm-Schaltfläche · Regler · Prozentwert -->
+            <DockPanel Margin="0,14,0,0" IsEnabled="{Binding IsAvailable}">
+                <Button DockPanel.Dock="Left" Command="{Binding ToggleMuteCommand}" ToolTip="{Binding MuteToolTip}" Width="40" Height="36" Padding="0">
+                    <TextBlock Text="{Binding Glyph}" Style="{StaticResource FlyoutGlyph}" FontSize="16" />
+                </Button>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Level, StringFormat={}{0:0}}" Width="34" TextAlignment="Right"
+                           FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular" />
+                <Slider x:Name="LevelSlider" Minimum="0" Maximum="100" SmallChange="1" LargeChange="10"
+                        IsMoveToPointEnabled="True" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center" Margin="12,0,10,0"
+                        Value="{Binding Level, Mode=TwoWay}" />
+            </DockPanel>
+
+            <!-- Lautstärke je App (relativ zur Gerätelautstärke, wie im Windows-Lautstärkemixer) -->
+            <StackPanel Visibility="{Binding AppsVisibility}">
+                <Border Style="{StaticResource FlyoutDivider}" />
+                <TextBlock Text="{Binding AppsTitle}" FontSize="12.5" Opacity="0.6" Margin="0,0,0,4" />
+                <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Apps}" Focusable="False">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,3" ToolTip="{Binding Name}">
+                                    <Button DockPanel.Dock="Left" Command="{Binding ToggleMuteCommand}" Width="34" Height="30" Padding="0"
+                                            ToolTip="Stumm ein/aus">
+                                        <Grid>
+                                            <Image Source="{Binding Icon}" Visibility="{Binding IconVisibility}" Width="18" Height="18"
+                                                   RenderOptions.BitmapScalingMode="HighQuality" />
+                                            <TextBlock Text="{Binding FallbackGlyph}" Visibility="{Binding FallbackVisibility}" Style="{StaticResource FlyoutGlyph}" />
+                                            <!-- Stumm: Symbol abdunkeln und durchgestrichenen Lautsprecher darüberlegen -->
+                                            <TextBlock Text="&#xE74F;" FontSize="11" Foreground="#FFDA4453"
+                                                       HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-6,-6">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource FlyoutGlyph}">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Muted}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
+                                    </Button>
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Level, StringFormat={}{0:0}}" Width="34" TextAlignment="Right"
+                                               FontSize="12.5" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular" />
+                                    <StackPanel VerticalAlignment="Center" Margin="10,0,8,0">
+                                        <TextBlock Text="{Binding Name}" FontSize="12" Opacity="0.75" TextTrimming="CharacterEllipsis" />
+                                        <Slider Minimum="0" Maximum="100" SmallChange="1" LargeChange="10" IsMoveToPointEnabled="True"
+                                                IsSnapToTickEnabled="True" TickFrequency="1" Value="{Binding Level, Mode=TwoWay}" Margin="0,-2,0,0" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+
+            <Border Style="{StaticResource FlyoutDivider}" />
+            <DockPanel LastChildFill="False">
+                <Button DockPanel.Dock="Left" Command="{Binding OpenMixerCommand}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE9E9;" Style="{StaticResource FlyoutGlyph}" Margin="0,0,8,0" />
+                        <TextBlock Text="Lautstärkemixer" />
+                    </StackPanel>
+                </Button>
+                <Button DockPanel.Dock="Right" Command="{Binding OpenSoundSettingsCommand}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE713;" Style="{StaticResource FlyoutGlyph}" Margin="0,0,8,0" />
+                        <TextBlock Text="Sound …" />
+                    </StackPanel>
+                </Button>
+            </DockPanel>
+        </StackPanel>
+    </Border>
+</w:FlyoutWindow>

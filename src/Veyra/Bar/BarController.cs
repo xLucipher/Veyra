@@ -10,6 +10,10 @@ using Veyra.Monitors;
 using Veyra.Widgets;
 using Veyra.Widgets.Audio;
 using Veyra.Widgets.Clock;
+using Veyra.Widgets.Metrics;
+using Veyra.Widgets.Network;
+using Veyra.Widgets.Timers;
+using Veyra.Widgets.Volume;
 
 namespace Veyra.Bar;
 
@@ -21,7 +25,7 @@ namespace Veyra.Bar;
 public sealed class BarController : IDisposable
 {
     private readonly SettingsService _settings;
-    private readonly Func<AudioDeviceService> _audioService;
+    private readonly WidgetServices _services;
     private readonly Action<string> _openSettings;
     private readonly Action _reload;
     private readonly Action _exit;
@@ -37,12 +41,12 @@ public sealed class BarController : IDisposable
     private bool _forceNextLayout;
     private bool _disposed;
 
-    public BarController(SettingsService settings, string barId, Func<AudioDeviceService> audioService,
+    public BarController(SettingsService settings, string barId, WidgetServices services,
         Action<string> openSettings, Action reload, Action exit)
     {
         _settings = settings;
         BarId = barId;
-        _audioService = audioService;
+        _services = services;
         _openSettings = openSettings;
         _reload = reload;
         _exit = exit;
@@ -134,6 +138,7 @@ public sealed class BarController : IDisposable
         window.SessionUnlocked += (_, _) => ScheduleLayout(force: true);
         window.ShellRestarted += (_, _) => OnShellRestarted();
         window.SystemTimeChanged += (_, _) => OnSystemTimeChanged();
+        window.HotkeyPressed += (_, id) => OnHotkeyPressed(id);
         window.ShellWindowActivity += (_, _) => _detector.RequestEvaluation();
         window.FullscreenAppNotification += (_, opening) =>
         {
@@ -163,8 +168,15 @@ public sealed class BarController : IDisposable
             IBarWidget? widget = entry.Type switch
             {
                 WidgetType.Clock => new ClockWidget(entry.Id),
-                WidgetType.AudioOutputs => new AudioDevicesWidget(entry.Id, AudioFlow.Output, _audioService()),
-                WidgetType.AudioInputs => new AudioDevicesWidget(entry.Id, AudioFlow.Input, _audioService()),
+                WidgetType.AudioOutputs => new AudioDevicesWidget(entry.Id, AudioFlow.Output, _services.Audio),
+                WidgetType.AudioInputs => new AudioDevicesWidget(entry.Id, AudioFlow.Input, _services.Audio),
+                WidgetType.Cpu or WidgetType.Gpu or WidgetType.Ram or WidgetType.GpuTemperature =>
+                    new MetricWidget(entry.Id, entry.Type, _services.SystemMonitor),
+                WidgetType.Network => new NetworkWidget(entry.Id, _services.NetworkStatus),
+                WidgetType.NetworkTraffic => new TrafficWidget(entry.Id, _services.NetworkTraffic),
+                WidgetType.Volume => new VolumeWidget(entry.Id, _services.Volume),
+                WidgetType.Timer => new TimerWidget(entry.Id, _services.Timers, UpdateEntry),
+                WidgetType.Stopwatch => new StopwatchWidget(entry.Id, _services.Timers),
                 _ => null,
             };
             if (widget is null) continue;
@@ -222,6 +234,16 @@ public sealed class BarController : IDisposable
         _settings.Save(settings);
     }
 
+    /// <summary>Ein Widget ändert seinen eigenen Eintrag (z. B. Timer im Popup bearbeitet) → dauerhaft speichern.</summary>
+    private void UpdateEntry(string entryId, Action<WidgetEntry> change)
+    {
+        var settings = _settings.Current.Clone();
+        var entry = Bar(settings)?.Widgets.FirstOrDefault(w => w.Id == entryId);
+        if (entry is null) return;
+        change(entry);
+        _settings.Save(settings);
+    }
+
     private void DisposeWidgets()
     {
         foreach (var widget in _widgets) widget.Dispose();
@@ -233,8 +255,68 @@ public sealed class BarController : IDisposable
     private static string LayoutSignature(BarSettings bar) =>
         string.Join(";", bar.Widgets.Where(w => w.Enabled).Select(w => $"{w.Type}#{w.Id}"));
 
+    // ---- Tastenkürzel der Widgets -----------------------------------------------------------
+
+    /// <summary>
+    /// Angemeldete Tastenkürzel: ID → Widget-Eintrag und Aktion (null = Gerätewechsel eines Audio-Widgets).
+    /// IDs sind über alle Leisten eindeutig.
+    /// </summary>
+    private readonly Dictionary<int, (string EntryId, string? Action)> _hotkeyTargets = [];
+    private static int _nextHotkeyId;
+
+    /// <summary>Alle Tastenkürzel dieser Leiste abmelden (vor dem Neuanmelden aller Leisten).</summary>
+    public void UnregisterHotkeys()
+    {
+        _window?.UnregisterHotkeys();
+        _hotkeyTargets.Clear();
+    }
+
+    /// <summary>Tastenkürzel der aktiven Widgets anmelden. Belegte Kürzel werden protokolliert und übersprungen.</summary>
+    public void RegisterHotkeys()
+    {
+        var bar = Bar(_settings.Current);
+        var window = _window;
+        if (window is null || bar is null) return;
+
+        foreach (var entry in bar.Widgets.Where(w => w.Enabled))
+        {
+            if (entry.Hotkey is not null) Register(entry, null, entry.Hotkey, repeat: false);
+            foreach (var (action, text) in entry.Hotkeys ?? [])
+                Register(entry, action, text, WidgetHotkeys.Find(entry.Type, action)?.Repeat ?? false);
+        }
+
+        void Register(WidgetEntry entry, string? action, string text, bool repeat)
+        {
+            if (!Hotkey.TryParse(text, out var hotkey)) return;
+            string target = action is null ? $"Widget {entry.Type} ({entry.Id})" : $"Widget {entry.Type} ({entry.Id}): {action}";
+            int id = _nextHotkeyId = (_nextHotkeyId + 1) % 0xC000; // Anwendungs-IDs: 0x0000–0xBFFF
+            if (window.RegisterHotkey(id, hotkey, repeat))
+            {
+                _hotkeyTargets[id] = (entry.Id, action);
+                Log.Info("Hotkey", $"{bar.Name}: {hotkey.DisplayText} → {target}");
+            }
+            else
+            {
+                Log.Warning("Hotkey", $"{bar.Name}: {hotkey.DisplayText} ist bereits belegt (anderes Programm oder Widget) – {target} ohne Tastenkürzel");
+            }
+        }
+    }
+
+    private void OnHotkeyPressed(int id)
+    {
+        if (!_hotkeyTargets.TryGetValue(id, out var target)) return;
+        // Auch während die Leiste bei Vollbild ausgeblendet ist: Die Widgets existieren weiter, nur ohne Aktualisierung.
+        if (target.Action is null)
+        {
+            _widgets.OfType<AudioDevicesWidget>().FirstOrDefault(w => w.EntryId == target.EntryId)?.SelectNextDevice();
+            return;
+        }
+        _widgets.OfType<IHotkeyTarget>().FirstOrDefault(w => w.EntryId == target.EntryId)?.OnHotkey(target.Action);
+    }
+
     private void TearDownBar()
     {
+        _hotkeyTargets.Clear();
         DisposeWidgets();
         _viewModel = null;
 

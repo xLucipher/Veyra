@@ -1,4 +1,3 @@
-using Veyra.Audio;
 using Veyra.Configuration;
 using Veyra.Core;
 
@@ -7,7 +6,7 @@ namespace Veyra.Bar;
 /// <summary>
 /// Verwaltet alle Leisten: je <see cref="BarSettings"/> ein <see cref="BarController"/> mit eigenem Fenster.
 /// Kommen Leisten in den Einstellungen hinzu oder fallen weg, werden die Fenster passend erzeugt bzw. geschlossen.
-/// Gemeinsam genutzt werden nur Einstellungen und der Audio-Dienst.
+/// Gemeinsam genutzt werden Einstellungen und die Datenquellen der Widgets (<see cref="WidgetServices"/>).
 /// </summary>
 public sealed class BarManager : IDisposable
 {
@@ -16,7 +15,7 @@ public sealed class BarManager : IDisposable
     private readonly Action _exit;
     private readonly List<BarController> _bars = [];
 
-    private AudioDeviceService? _audioService;
+    private readonly WidgetServices _services = new();
     private bool _autoHideWarningLogged;
     private bool _disposed;
 
@@ -34,6 +33,7 @@ public sealed class BarManager : IDisposable
     public void Start()
     {
         _settings.Changed += OnSettingsChanged;
+        HotkeyCapture.Changed += OnHotkeyCaptureChanged;
         ApplyGlobalSettings(_settings.Current);
         SyncBars(_settings.Current);
     }
@@ -44,6 +44,7 @@ public sealed class BarManager : IDisposable
         Log.Info("Bar", "Leisten werden neu geladen");
         _settings.ReloadFromDisk();
         foreach (var bar in _bars) bar.Rebuild();
+        RefreshHotkeys();
     }
 
     /// <summary>Notfall-Aufräumen aus dem Absturz-Handler (beliebiger Thread): reservierte Bildschirmbereiche freigeben.</summary>
@@ -57,12 +58,11 @@ public sealed class BarManager : IDisposable
         if (_disposed) return;
         _disposed = true;
         _settings.Changed -= OnSettingsChanged;
+        HotkeyCapture.Changed -= OnHotkeyCaptureChanged;
         foreach (var bar in _bars) bar.Dispose();
         _bars.Clear();
-        _audioService?.Dispose();
+        _services.Dispose();
     }
-
-    private AudioDeviceService AudioService => _audioService ??= new AudioDeviceService();
 
     private void OnSettingsChanged(object? sender, AppSettings settings)
     {
@@ -90,11 +90,29 @@ public sealed class BarManager : IDisposable
             }
 
             Log.Info("Bar", $"Leiste „{bar.Name}“ ({bar.Id}) wird erzeugt");
-            controller = new BarController(_settings, bar.Id, () => AudioService, id => _openSettings(id), Reload, _exit);
+            controller = new BarController(_settings, bar.Id, _services, id => _openSettings(id), Reload, _exit);
             _bars.Add(controller);
             controller.Start();
         }
+
+        // Laufende Timer bzw. Stoppuhren entfernter oder deaktivierter Widgets verwerfen (sie melden sich sonst weiter).
+        _services.RetainTimers(settings.Bars.SelectMany(b => b.Widgets).Where(w => w.Enabled).Select(w => w.Id).ToHashSet());
+
+        RefreshHotkeys();
     }
+
+    /// <summary>
+    /// Tastenkürzel aller Leisten neu anmelden: erst alle ab, dann alle an – so kann ein Kürzel von einem Widget
+    /// zu einem anderen (auch auf einer anderen Leiste) wandern, ohne dass die alte Anmeldung im Weg ist.
+    /// </summary>
+    private void RefreshHotkeys()
+    {
+        foreach (var bar in _bars) bar.UnregisterHotkeys();
+        if (HotkeyCapture.IsActive) return; // Eingabe im Einstellungsfenster läuft – danach wieder anmelden
+        foreach (var bar in _bars) bar.RegisterHotkeys();
+    }
+
+    private void OnHotkeyCaptureChanged(object? sender, EventArgs e) => RefreshHotkeys();
 
     private void ApplyGlobalSettings(AppSettings settings)
     {

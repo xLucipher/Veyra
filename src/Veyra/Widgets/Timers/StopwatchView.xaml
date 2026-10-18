@@ -1,0 +1,17 @@
+<UserControl x:Class="Veyra.Widgets.Timers.StopwatchView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Focusable="False"
+             ToolTip="{Binding ToolTipText}"
+             MouseLeftButtonUp="OnClick">
+    <!-- Stoppuhr-Symbol · Zeit (Tabellenziffern: nichts wackelt) -->
+    <Border Style="{StaticResource WidgetHoverArea}" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="&#xE916;" Foreground="{Binding IconBrush}" FontFamily="{StaticResource WidgetIconFont}" FontSize="16"
+                       VerticalAlignment="Center" />
+            <TextBlock Text="{Binding ElapsedText}" Opacity="{Binding TextOpacity}" FontFamily="{Binding FontFamily}" FontSize="13"
+                       FontWeight="SemiBold" Foreground="{Binding Foreground}" VerticalAlignment="Center" Margin="7,0,0,0"
+                       Typography.NumeralAlignment="Tabular" />
+        </StackPanel>
+    </Border>
+</UserControl>

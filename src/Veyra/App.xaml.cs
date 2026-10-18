@@ -113,6 +113,7 @@ public partial class App : Application
             _settingsWindow?.Close();
             _updates?.Dispose();
             _bar?.Dispose();
+            Notifier.Shutdown();
             _settings?.Dispose();
         }
         catch (Exception ex)

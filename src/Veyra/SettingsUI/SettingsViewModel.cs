@@ -111,6 +111,50 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public IReadOnlyList<double> MarginPresets => WidgetCatalog.MarginPresets;
     public IReadOnlyList<double> SpacingPresets => WidgetCatalog.SpacingPresets;
     public IReadOnlyList<double> ScalePresets => WidgetCatalog.ScalePresets;
+    public IReadOnlyList<EnumOption> MetricStyleOptions => WidgetCatalog.MetricStyles;
+
+    public IReadOnlyList<EnumOption> VolumeFlowOptions => WidgetCatalog.VolumeFlows;
+    public IReadOnlyList<EnumOption> TimerSoundOptions => WidgetCatalog.TimerSounds;
+    public IReadOnlyList<EnumOption> TrafficDirectionOptions => WidgetCatalog.TrafficDirections;
+    public IReadOnlyList<IntOption> TrafficIntervalOptions => WidgetCatalog.TrafficIntervals;
+    public IReadOnlyList<int> WheelStepOptions => WidgetCatalog.WheelSteps;
+
+    private IReadOnlyList<Option>? _adapterOptions;
+
+    /// <summary>Netzwerkadapter für Upload-/Download-Widgets; "" = alle aktiven Adapter.</summary>
+    public IReadOnlyList<Option> AdapterOptions => _adapterOptions ??= BuildAdapterOptions();
+
+    private IReadOnlyList<Option> BuildAdapterOptions()
+    {
+        var options = new List<Option> { new("", "Alle aktiven Netzwerkadapter") };
+        options.AddRange(Network.NetworkTrafficMonitor.EnumerateAdapters()
+            .Select(a => new Option(a.Id, a.IsUp ? $"{a.Name} – {a.Description}" : $"{a.Name} – {a.Description} (nicht verbunden)")));
+        // Gespeicherter, gerade nicht vorhandener Adapter bleibt auswählbar.
+        foreach (var missing in _settings.Bars.SelectMany(b => b.Widgets).Select(w => w.Traffic)
+                     .Where(t => t is { Adapter.Length: > 0 } && options.All(o => !string.Equals(o.Value, t.Adapter, StringComparison.OrdinalIgnoreCase)))
+                     .DistinctBy(t => t!.Adapter, StringComparer.OrdinalIgnoreCase))
+            options.Add(new Option(missing!.Adapter, $"{(missing.AdapterName.Length > 0 ? missing.AdapterName : missing.Adapter)} (nicht gefunden)"));
+        return options;
+    }
+
+    private IReadOnlyList<Option>? _gpuOptions;
+
+    /// <summary>Grafikkarten für GPU- und Temperatur-Widgets; "" = automatisch.</summary>
+    public IReadOnlyList<Option> GpuOptions => _gpuOptions ??= BuildGpuOptions();
+
+    private IReadOnlyList<Option> BuildGpuOptions()
+    {
+        var gpus = Sensors.SystemMonitor.EnumerateGpus();
+        var auto = gpus.OrderByDescending(g => g.DedicatedMemory).FirstOrDefault();
+        var options = new List<Option> { new("", auto is null ? "Automatisch" : $"Automatisch ({auto.Name})") };
+        options.AddRange(gpus.Select(g => new Option(g.Name, g.Name)));
+        // Gespeicherte, gerade nicht vorhandene Karte bleibt auswählbar.
+        foreach (var missing in _settings.Bars.SelectMany(b => b.Widgets).Select(w => w.Metric?.Gpu)
+                     .Where(n => !string.IsNullOrEmpty(n) && options.All(o => !string.Equals(o.Value, n, StringComparison.OrdinalIgnoreCase)))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+            options.Add(new Option(missing!, $"{missing} (nicht gefunden – automatisch)"));
+        return options;
+    }
 
     // ---- Leistenmodus ----------------------------------------------------------------------
     public ICommand CenterHorizontallyCommand { get; }
@@ -300,6 +344,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         foreach (var entry in Bar.Widgets.OrderBy(w => w.IsFixed ? 0 : 1).ThenBy(w => w.IsFixed ? (double)w.Slot : w.Position))
             WidgetRows.Add(CreateRow(entry));
         RebuildClockRows();
+        UpdateHotkeyWarnings();
     }
 
     private WidgetRowViewModel CreateRow(WidgetEntry entry)
@@ -310,17 +355,67 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             WidgetType.AudioInputs => _audioService.GetDevices(AudioFlow.Input),
             _ => [],
         };
-        return new WidgetRowViewModel(entry, devices, _settings.Audio, Bar.Appearance.ForegroundColor,
+        var created = new WidgetRowViewModel(entry, devices, _settings.Audio, Bar.Appearance.ForegroundColor,
             remove: row =>
             {
                 WidgetRows.Remove(row);
                 RebuildClockRows();
+                UpdateHotkeyWarnings();
             },
             editClock: row =>
             {
                 SelectedClock = row;
                 SelectedPageIndex = ClockPageIndex;
-            });
+            },
+            hotkeyChanged: UpdateHotkeyWarnings)
+        {
+            IsExpanded = _expandedWidgets.Contains(entry.Id),
+        };
+        // Aufgeklappte Widgets merken – nach "Übernehmen" werden die Zeilen neu erzeugt.
+        created.PropertyChanged += (sender, e) =>
+        {
+            if (e.PropertyName != nameof(WidgetRowViewModel.IsExpanded) || sender is not WidgetRowViewModel row) return;
+            if (row.IsExpanded) _expandedWidgets.Add(row.Id);
+            else _expandedWidgets.Remove(row.Id);
+        };
+        return created;
+    }
+
+    /// <summary>IDs der ausgeklappten Widget-Karten (standardmäßig sind alle eingeklappt).</summary>
+    private readonly HashSet<string> _expandedWidgets = [];
+
+    /// <summary>
+    /// Tastenkürzel prüfen: doppelt vergeben (auch auf anderen Leisten) oder von einem anderen Programm belegt.
+    /// Kürzel, die Veyra gerade selbst angemeldet hat, gelten als frei – sie werden beim Übernehmen neu vergeben.
+    /// </summary>
+    private void UpdateHotkeyWarnings()
+    {
+        static IEnumerable<string?> EntryHotkeys(WidgetEntry w) => (w.Hotkeys?.Values ?? Enumerable.Empty<string>()).Prepend(w.Hotkey);
+
+        var otherBars = _settings.Bars.Where(b => b != Bar).SelectMany(b => b.Widgets).SelectMany(EntryHotkeys);
+        var thisBar = WidgetRows.Where(r => r.IsAudio).Select(r => r.Hotkey)
+            .Concat(WidgetRows.SelectMany(r => r.HotkeyActions).Select(a => a.Hotkey));
+        var all = thisBar.Concat(otherBars).OfType<string>().ToList();
+        var ownRegistered = _service.Current.Bars.SelectMany(b => b.Widgets).SelectMany(EntryHotkeys).OfType<string>().ToHashSet();
+
+        string Warning(string? hotkey) => hotkey is null ? ""
+            : all.Count(h => h == hotkey) > 1 ? "Dieses Tastenkürzel ist bei einem anderen Widget bzw. einer anderen Aktion schon vergeben."
+            : !ownRegistered.Contains(hotkey) && !IsHotkeyAvailable(hotkey) ? "Dieses Tastenkürzel ist bereits von Windows oder einem anderen Programm belegt."
+            : "";
+
+        foreach (var row in WidgetRows.Where(r => r.IsAudio)) row.HotkeyWarning = Warning(row.Hotkey);
+        foreach (var action in WidgetRows.SelectMany(r => r.HotkeyActions)) action.HotkeyWarning = Warning(action.Hotkey);
+    }
+
+    /// <summary>Probeweise anmelden und sofort wieder abmelden.</summary>
+    private static bool IsHotkeyAvailable(string text)
+    {
+        if (!Hotkey.TryParse(text, out var hotkey)) return false;
+        const int probeId = 0xBFFF;
+        if (!Interop.NativeMethods.RegisterHotKey(IntPtr.Zero, probeId, hotkey.NativeModifiers | Interop.NativeMethods.MOD_NOREPEAT, hotkey.VirtualKey))
+            return false;
+        Interop.NativeMethods.UnregisterHotKey(IntPtr.Zero, probeId);
+        return true;
     }
 
     // ---- Uhren (jede Uhr hat eigene Einstellungen) ------------------------------------------
@@ -411,6 +506,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     {
         if (NewWidget is null) return;
         var entry = new WidgetEntry { Type = NewWidget.Type, Enabled = true, Position = 0.75 };
+        _expandedWidgets.Add(entry.Id); // neues Widget gleich zum Einstellen öffnen
         if (entry.IsFixed)
         {
             // Bevorzugt einen noch freien Bereich wählen.
@@ -558,6 +654,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         {
             if (string.IsNullOrEmpty(value)) return;
             ClockEdit.TimeFormat = value;
+            _selectedClock?.RefreshSummary();
             ClockEdit.ShowSeconds = ClockSettings.HasSeconds(value);
             OnPropertyChanged();
         }

@@ -9,7 +9,11 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         DataContext = viewModel;
         viewModel.CloseRequested += (_, _) => Close();
-        Closed += (_, _) => viewModel.Dispose();
+        Closed += (_, _) =>
+        {
+            Veyra.Core.HotkeyCapture.Set(false); // falls beim Schließen noch ein Tastenkürzel-Feld aktiv war
+            viewModel.Dispose();
+        };
     }
 
     /// <summary>Leiste auswählen (Rechtsklick → Einstellungen auf einer bestimmten Leiste).</summary>

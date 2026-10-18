@@ -565,21 +565,41 @@
                             <DataTemplate>
                                 <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,0,8">
                                     <StackPanel>
-                                        <!-- Kopfzeile: Symbol, Name, Aktiv, Entfernen -->
+                                        <!-- Kopfzeile: Symbol, Name, Aktiv, Entfernen, Ein-/Ausklappen -->
                                         <DockPanel>
-                                            <TextBlock DockPanel.Dock="Left" Text="{Binding Info.Glyph}" Style="{StaticResource Glyph}" FontSize="22" Width="40" />
                                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                                                 <CheckBox IsChecked="{Binding Enabled}" Content="Aktiv" MinWidth="0" />
                                                 <Button Command="{Binding RemoveCommand}" ToolTip="Widget entfernen" Margin="8,0,0,0" Padding="10,6">
                                                     <TextBlock Text="&#xE74D;" Style="{StaticResource Glyph}" FontSize="12" />
                                                 </Button>
+                                                <Button Command="{Binding ToggleExpandedCommand}" ToolTip="{Binding ExpandToolTip}" Margin="8,0,0,0" Padding="10,6">
+                                                    <TextBlock Text="{Binding ChevronGlyph}" Style="{StaticResource Glyph}" FontSize="12" />
+                                                </Button>
                                             </StackPanel>
-                                            <StackPanel VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Title}" Style="{StaticResource RowTitle}" FontWeight="SemiBold" />
-                                                <TextBlock Text="{Binding Info.Description}" Style="{StaticResource RowHint}" />
-                                            </StackPanel>
+                                            <!-- Klick auf Symbol oder Name klappt ebenfalls aus/ein -->
+                                            <DockPanel Background="Transparent" Cursor="Hand" ToolTip="{Binding ExpandToolTip}">
+                                                <DockPanel.InputBindings>
+                                                    <MouseBinding Gesture="LeftClick" Command="{Binding ToggleExpandedCommand}" />
+                                                </DockPanel.InputBindings>
+                                                <!-- Schriftsymbol oder eigene Kontur (Timer) -->
+                                                <Grid DockPanel.Dock="Left" Width="40" HorizontalAlignment="Left">
+                                                    <TextBlock x:Name="GlyphText" Text="{Binding Info.Glyph}" Style="{StaticResource Glyph}" FontSize="22" />
+                                                    <Viewbox Width="22" Height="22" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                        <Canvas Width="24" Height="24">
+                                                            <Path Data="{Binding Info.PathData}" Stroke="{Binding Foreground, ElementName=GlyphText}" StrokeThickness="1.6"
+                                                                  StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                                        </Canvas>
+                                                    </Viewbox>
+                                                </Grid>
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Title}" Style="{StaticResource RowTitle}" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding Summary}" Style="{StaticResource RowHint}" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </DockPanel>
                                         </DockPanel>
 
+                                        <!-- Einstellungen: standardmäßig eingeklappt, Klick auf die Kopfzeile klappt aus -->
+                                        <StackPanel Visibility="{Binding DetailsVisibility}">
                                         <!-- Alle Widgets: Größe -->
                                         <StackPanel Margin="40,6,0,0">
                                             <Border Style="{StaticResource Divider}" />
@@ -647,28 +667,11 @@
                                         <StackPanel Visibility="{Binding AudioVisibility}" Margin="40,6,0,0">
                                             <Border Style="{StaticResource Divider}" />
                                             <DockPanel Style="{StaticResource Row}">
-                                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding IconColor, UpdateSourceTrigger=PropertyChanged}" />
-                                                <TextBlock Text="Symbolfarbe" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
-                                            </DockPanel>
-                                            <DockPanel Style="{StaticResource Row}">
-                                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding LabelColor, UpdateSourceTrigger=PropertyChanged}" />
+                                                <ui:HotkeyBox DockPanel.Dock="Right" Width="240" VerticalAlignment="Center" Hotkey="{Binding Hotkey}" />
                                                 <StackPanel VerticalAlignment="Center">
-                                                    <TextBlock Text="Schriftfarbe" Style="{StaticResource RowTitle}" />
-                                                    <TextBlock Text="Für die Gerätenamen (Audiogeräte → Beschriftung)." Style="{StaticResource RowHint}" />
-                                                </StackPanel>
-                                            </DockPanel>
-                                            <DockPanel Style="{StaticResource Row}">
-                                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding IndicatorColor, UpdateSourceTrigger=PropertyChanged}" />
-                                                <StackPanel VerticalAlignment="Center">
-                                                    <TextBlock Text="Markierungsfarbe" Style="{StaticResource RowTitle}" />
-                                                    <TextBlock Text="Strich unter dem aktiven Standardgerät." Style="{StaticResource RowHint}" />
-                                                </StackPanel>
-                                            </DockPanel>
-                                            <DockPanel Style="{StaticResource Row}">
-                                                <Button DockPanel.Dock="Right" Content="Zurücksetzen" Command="{Binding ResetColorsCommand}" VerticalAlignment="Center" />
-                                                <StackPanel VerticalAlignment="Center">
-                                                    <TextBlock Text="Farben der Leiste verwenden" Style="{StaticResource RowTitle}" />
-                                                    <TextBlock Text="Ohne eigene Farbe folgt das Widget der Schriftfarbe unter „Darstellung“; die Markierung wird wieder blau." Style="{StaticResource RowHint}" />
+                                                    <TextBlock Text="Tastenkürzel" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Wechselt bei jedem Druck zum nächsten Gerät dieses Widgets (von links nach rechts) – auch in Spielen. Rücktaste oder Entf löscht." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding HotkeyWarning}" Visibility="{Binding HotkeyWarningVisibility}" Foreground="#FDBC4B" TextWrapping="Wrap" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </DockPanel>
                                             <Border Style="{StaticResource Divider}" />
@@ -692,6 +695,308 @@
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
                                         </StackPanel>
+
+                                        <!-- Mess-Widgets: Darstellung, Bezeichnung, Warnfarben, Einheit, Grafikkarte -->
+                                        <StackPanel Visibility="{Binding MetricVisibility}" Margin="40,6,0,0">
+                                            <Border Style="{StaticResource Divider}" />
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <ComboBox DockPanel.Dock="Right" Width="260" VerticalAlignment="Center"
+                                                          ItemsSource="{Binding DataContext.MetricStyleOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding MetricStyle}" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Darstellung" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Balken: aktuelle Auslastung. Verlauf: Mini-Diagramm der letzten 60 Sekunden." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}" Visibility="{Binding GpuChoiceVisibility}">
+                                                <ComboBox DockPanel.Dock="Right" Width="320" VerticalAlignment="Center"
+                                                          ItemsSource="{Binding DataContext.GpuOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding GpuChoice}" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Grafikkarte" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Automatisch: die Karte mit dem meisten eigenen Videospeicher." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}" Visibility="{Binding RamVisibility}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Metric.ShowAmount}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Belegung in GB statt Prozent" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Die genauen Werte stehen immer im Tooltip." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Metric.ShowCaption}" VerticalAlignment="Center" />
+                                                <TextBlock Text="Bezeichnung anzeigen (CPU, GPU, RAM bzw. Thermometer)" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Metric.WarnColors}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Warnfarben" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Auslastung ab 80 % orange, ab 95 % rot – Temperatur ab 80 °C orange, ab 90 °C rot." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </StackPanel>
+
+                                        <!-- Netzwerk: Name, Signal, Schnellzugriff -->
+                                        <StackPanel Visibility="{Binding NetworkVisibility}" Margin="40,6,0,0">
+                                            <Border Style="{StaticResource Divider}" />
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Network.ShowName}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Netzwerkname anzeigen" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="WLAN: SSID, LAN: Name des Netzwerks laut Windows. Aus: nur das Symbol." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Network.ShowSignal}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Signalstärke in Prozent anzeigen" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Nur WLAN. Das Symbol zeigt die Signalstufe immer. Ab Windows 11 24H2 braucht Windows dafür den Standortzugriff für Desktop-Apps." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Network.ShowSettingsButton}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Schnellzugriff auf die Netzwerkeinstellungen" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Schaltfläche im Popup, das sich beim Klick auf das Widget öffnet." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </StackPanel>
+
+                                        <!-- Lautstärke: Gerät, Anzeige, Mausrad, Rechtsklick -->
+                                        <StackPanel Visibility="{Binding VolumeVisibility}" Margin="40,6,0,0">
+                                            <Border Style="{StaticResource Divider}" />
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <ComboBox DockPanel.Dock="Right" Width="320" VerticalAlignment="Center"
+                                                          ItemsSource="{Binding DataContext.VolumeFlowOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding VolumeFlow}" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Gerät" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Immer das aktuelle Standardgerät – wechselt automatisch mit." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Volume.ShowPercent}" VerticalAlignment="Center" />
+                                                <TextBlock Text="Lautstärke in Prozent anzeigen" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Volume.ShowBar}" VerticalAlignment="Center" />
+                                                <TextBlock Text="Füllbalken anzeigen" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <ComboBox DockPanel.Dock="Right" Width="140" VerticalAlignment="Center"
+                                                          ItemsSource="{Binding DataContext.WheelStepOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          SelectedItem="{Binding WheelStep}" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Schrittweite des Mausrads (%)" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Änderung je Raste über dem Widget oder im Regler-Popup." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Volume.RightClickMutes}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Rechtsklick schaltet stumm" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Aus: Rechtsklick öffnet wie überall das Kontextmenü der Leiste; Stummschalten dann über den Regler." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Volume.ShowApps}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Lautstärke je App im Regler" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Wie der Windows-Lautstärkemixer: ein Regler je Programm mit Ton (beim Mikrofon: je aufnehmendem Programm). Mausrad über einer App regelt nur diese, Klick aufs Symbol schaltet sie stumm." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </StackPanel>
+
+                                        <!-- Timer: Liste, Anzeige, Benachrichtigung -->
+                                        <StackPanel Visibility="{Binding TimerVisibility}" Margin="40,6,0,0">
+                                            <Border Style="{StaticResource Divider}" />
+                                            <TextBlock Text="Timer" Style="{StaticResource RowTitle}" Margin="0,8,0,0" />
+                                            <TextBlock Text="Dauer als Minuten („25“), min:s („1:30“), h:min:s („1:00:00“) oder mit Einheiten („1h 30m“). Timer lassen sich auch direkt im Popup anlegen und bearbeiten." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                            <ItemsControl ItemsSource="{Binding TimerRows}" Margin="0,6,0,0">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Margin="0,3">
+                                                            <DockPanel>
+                                                                <Button DockPanel.Dock="Right" Command="{Binding RemoveCommand}" ToolTip="Timer entfernen" Margin="8,0,0,0" Padding="10,6">
+                                                                    <TextBlock Text="&#xE74D;" Style="{StaticResource Glyph}" FontSize="12" />
+                                                                </Button>
+                                                                <TextBox DockPanel.Dock="Right" Width="140" VerticalAlignment="Center" Margin="8,0,0,0" ToolTip="Dauer"
+                                                                         Text="{Binding DurationText, UpdateSourceTrigger=PropertyChanged}" />
+                                                                <TextBox VerticalAlignment="Center" ToolTip="Name" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                                                            </DockPanel>
+                                                            <TextBlock Text="Ungültige Dauer – gespeichert wird der letzte gültige Wert." Visibility="{Binding DurationHintVisibility}"
+                                                                       Foreground="#FDBC4B" FontSize="12" Margin="0,2,0,0" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <Button Command="{Binding AddTimerCommand}" HorizontalAlignment="Left" Margin="0,6,0,4">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="&#xE710;" Style="{StaticResource Glyph}" FontSize="12" Margin="0,0,8,0" />
+                                                    <TextBlock Text="Timer hinzufügen" />
+                                                </StackPanel>
+                                            </Button>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Timer.ShowAllActive}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Alle laufenden Timer auf der Leiste zeigen" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Aus: nur der Timer, der als Nächstes abläuft. Ohne laufenden Timer steht nur die Sanduhr da." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Timer.ShowName}" VerticalAlignment="Center" />
+                                                <TextBlock Text="Namen neben der Restzeit anzeigen" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Timer.ShowProgress}" VerticalAlignment="Center" />
+                                                <TextBlock Text="Fortschrittsbalken unter der Restzeit" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Timer.Notify}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Windows-Benachrichtigung nach Ablauf" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Erscheint auch, wenn die Leiste bei Vollbild ausgeblendet ist, und respektiert „Nicht stören“." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <ComboBox DockPanel.Dock="Right" Width="200" VerticalAlignment="Center"
+                                                          ItemsSource="{Binding DataContext.TimerSoundOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding TimerSound}" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Signalton" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Klänge aus dem Windows-Soundschema (Systemsteuerung → Sound → Sounds)." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </StackPanel>
+
+                                        <!-- Stoppuhr: Format, Runden -->
+                                        <StackPanel Visibility="{Binding StopwatchVisibility}" Margin="40,6,0,0">
+                                            <Border Style="{StaticResource Divider}" />
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Stopwatch.ShowMilliseconds}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Millisekunden auf der Leiste anzeigen" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Die Anzeige wird dann während des Laufs etwa 20-mal je Sekunde aktualisiert. Im Popup stehen sie immer." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Stopwatch.AlwaysShowHours}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Stunden immer anzeigen" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="„0:05:12“ statt „05:12“ – die Breite bleibt ab dem Start gleich." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Stopwatch.EnableLaps}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Rundenzeiten erfassen" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Schaltfläche „Runde“ im Popup; schnellste Runde grün, langsamste rot." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </StackPanel>
+
+                                        <!-- Upload/Download: Adapter, Richtung, Intervall, Darstellung -->
+                                        <StackPanel Visibility="{Binding TrafficVisibility}" Margin="40,6,0,0">
+                                            <Border Style="{StaticResource Divider}" />
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <ComboBox DockPanel.Dock="Right" Width="340" VerticalAlignment="Center"
+                                                          ItemsSource="{Binding DataContext.AdapterOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding TrafficAdapter}" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Netzwerkadapter" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Alle: Summe der verbundenen physischen Adapter (LAN, WLAN)." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <ComboBox DockPanel.Dock="Right" Width="240" VerticalAlignment="Center"
+                                                          ItemsSource="{Binding DataContext.TrafficDirectionOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding TrafficDirection}" />
+                                                <TextBlock Text="Anzeige" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <ComboBox DockPanel.Dock="Right" Width="140" VerticalAlignment="Center"
+                                                          ItemsSource="{Binding DataContext.TrafficIntervalOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          DisplayMemberPath="Display" SelectedValuePath="Value" SelectedValue="{Binding TrafficInterval}" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Aktualisierungsintervall" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Längere Intervalle glätten die Werte; gemessen wird für alle Widgets gemeinsam." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Traffic.Stacked}" VerticalAlignment="Center" />
+                                                <TextBlock Text="Download und Upload untereinander" Style="{StaticResource RowTitle}" VerticalAlignment="Center" />
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Traffic.ShowGraph}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Verlaufsgrafik" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Die letzten 40 Messungen; Download als Fläche, Upload als Linie." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding Traffic.UseBits}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="In Bit pro Sekunde (Mbit/s)" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Wie Provider und Router; aus: Byte pro Sekunde (MB/s) wie im Explorer." Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </StackPanel>
+
+                                        <!-- Tastenkürzel je Aktion: Lautstärke, Timer, Stoppuhr -->
+                                        <StackPanel Visibility="{Binding HotkeyActionsVisibility}" Margin="40,6,0,0">
+                                            <Border Style="{StaticResource Divider}" />
+                                            <TextBlock Text="Tastenkürzel" Style="{StaticResource RowTitle}" Margin="0,8,0,0" />
+                                            <TextBlock Text="Global – funktionieren auch in Spielen und während die Leiste bei Vollbild ausgeblendet ist. Hineinklicken und die Kombination drücken, Rücktaste oder Entf löscht." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                            <ItemsControl ItemsSource="{Binding HotkeyActions}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <DockPanel Style="{StaticResource Row}">
+                                                            <ui:HotkeyBox DockPanel.Dock="Right" Width="240" VerticalAlignment="Center" Hotkey="{Binding Hotkey}" />
+                                                            <StackPanel VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding Name}" Style="{StaticResource RowTitle}" />
+                                                                <TextBlock Text="{Binding Description}" Visibility="{Binding DescriptionVisibility}" Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                                <TextBlock Text="{Binding HotkeyWarning}" Visibility="{Binding HotkeyWarningVisibility}" Foreground="#FDBC4B" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                                            </StackPanel>
+                                                        </DockPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
+                                        <!-- Farben: alle Widgets außer der Uhr -->
+                                        <StackPanel Visibility="{Binding ColorsVisibility}" Margin="40,6,0,0">
+                                            <Border Style="{StaticResource Divider}" />
+                                            <DockPanel Style="{StaticResource Row}" Visibility="{Binding IconColorVisibility}">
+                                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding IconColor, UpdateSourceTrigger=PropertyChanged}" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding IconColorTitle}" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="{Binding IconColorHint}" Visibility="{Binding IconColorHintVisibility}" Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding LabelColor, UpdateSourceTrigger=PropertyChanged}" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Schriftfarbe" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="{Binding LabelColorHint}" Style="{StaticResource RowHint}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}" Visibility="{Binding IndicatorColorVisibility}">
+                                                <ui:ColorField DockPanel.Dock="Right" VerticalAlignment="Center" Value="{Binding IndicatorColor, UpdateSourceTrigger=PropertyChanged}" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding IndicatorColorTitle}" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="{Binding IndicatorColorHint}" Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource Row}">
+                                                <Button DockPanel.Dock="Right" Content="Zurücksetzen" Command="{Binding ResetColorsCommand}" VerticalAlignment="Center" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="Farben der Leiste verwenden" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="{Binding ResetColorsHint}" Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </StackPanel>
+                                        </StackPanel>
                                     </StackPanel>
                                 </Border>
                             </DataTemplate>
@@ -710,7 +1015,15 @@
                                 <ComboBox.ItemTemplate>
                                     <DataTemplate>
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding Glyph}" Style="{StaticResource Glyph}" Width="26" />
+                                            <Grid Width="26">
+                                                <TextBlock x:Name="GlyphText" Text="{Binding Glyph}" Style="{StaticResource Glyph}" />
+                                                <Viewbox Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                    <Canvas Width="24" Height="24">
+                                                        <Path Data="{Binding PathData}" Stroke="{Binding Foreground, ElementName=GlyphText}" StrokeThickness="1.6"
+                                                              StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                                    </Canvas>
+                                                </Viewbox>
+                                            </Grid>
                                             <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
                                         </StackPanel>
                                     </DataTemplate>
@@ -718,7 +1031,7 @@
                             </ComboBox>
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Text="Widget hinzufügen" Style="{StaticResource RowTitle}" />
-                                <TextBlock Text="Weitere Widgets (CPU, RAM, Medien …) folgen in späteren Versionen." Style="{StaticResource RowHint}" />
+                                <TextBlock Text="Weitere Widgets (z. B. Medien) folgen in späteren Versionen." Style="{StaticResource RowHint}" />
                             </StackPanel>
                         </DockPanel>
                     </Border>

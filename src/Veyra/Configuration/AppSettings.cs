@@ -153,6 +153,283 @@ public enum WidgetType
 
     /// <summary>Ein Button je aktivem Mikrofon – Klick setzt es als Standard.</summary>
     AudioInputs,
+
+    /// <summary>Prozessor-Auslastung in Prozent.</summary>
+    Cpu,
+
+    /// <summary>Grafikkarten-Auslastung in Prozent (wie im Task-Manager).</summary>
+    Gpu,
+
+    /// <summary>Belegter Arbeitsspeicher.</summary>
+    Ram,
+
+    /// <summary>Temperatur der Grafikkarte (wie im Task-Manager).</summary>
+    GpuTemperature,
+
+    /// <summary>Aktuelle Netzwerkverbindung (LAN/WLAN) mit Status, Netzwerkname und Signalstärke.</summary>
+    Network,
+
+    /// <summary>Systemlautstärke: Mausrad, Regler, Stummschalten.</summary>
+    Volume,
+
+    /// <summary>Beliebig viele Countdown-Timer mit Benachrichtigung.</summary>
+    Timer,
+
+    /// <summary>Stoppuhr mit Rundenzeiten.</summary>
+    Stopwatch,
+
+    /// <summary>Upload- und Downloadgeschwindigkeit.</summary>
+    NetworkTraffic,
+}
+
+/// <summary>Eine per Tastenkürzel auslösbare Aktion eines Widgets.</summary>
+/// <param name="Repeat">Gedrückt halten wiederholt die Aktion (z. B. Lauter/Leiser).</param>
+public sealed record HotkeyAction(string Id, string Name, string Description, bool Repeat = false);
+
+/// <summary>Tastenkürzel-Aktionen je Widget-Typ (gespeichert in <see cref="WidgetEntry.Hotkeys"/>).</summary>
+public static class WidgetHotkeys
+{
+    public const string VolumeUp = "VolumeUp";
+    public const string VolumeDown = "VolumeDown";
+    public const string Mute = "Mute";
+    public const string StartPause = "StartPause";
+    public const string Reset = "Reset";
+    public const string Lap = "Lap";
+
+    private static readonly IReadOnlyList<HotkeyAction> Volume =
+    [
+        new(VolumeUp, "Lauter", "Um die Schrittweite des Mausrads; gedrückt halten wiederholt.", Repeat: true),
+        new(VolumeDown, "Leiser", "Um die Schrittweite des Mausrads; gedrückt halten wiederholt.", Repeat: true),
+        new(Mute, "Stumm ein/aus", "Schaltet das Standardgerät stumm bzw. wieder laut."),
+    ];
+
+    private static readonly IReadOnlyList<HotkeyAction> Timer =
+    [
+        new(StartPause, "Starten / Pausieren", "Abgelaufene Timer: Alarm beenden. Sonst den nächsten aktiven Timer pausieren bzw. fortsetzen – oder den ersten starten."),
+        new(Reset, "Zurücksetzen", "Setzt alle laufenden, pausierten und abgelaufenen Timer dieses Widgets zurück."),
+    ];
+
+    private static readonly IReadOnlyList<HotkeyAction> Stopwatch =
+    [
+        new(StartPause, "Starten / Pausieren", ""),
+        new(Lap, "Runde", "Nur während die Stoppuhr läuft und Rundenzeiten eingeschaltet sind."),
+        new(Reset, "Zurücksetzen", ""),
+    ];
+
+    public static IReadOnlyList<HotkeyAction> For(WidgetType type) => type switch
+    {
+        WidgetType.Volume => Volume,
+        WidgetType.Timer => Timer,
+        WidgetType.Stopwatch => Stopwatch,
+        _ => [],
+    };
+
+    public static HotkeyAction? Find(WidgetType type, string action) => For(type).FirstOrDefault(a => a.Id == action);
+}
+
+/// <summary>Einstellungen des Netzwerk-Widgets. Farben stehen wie bei den anderen Widgets im <see cref="WidgetEntry"/>.</summary>
+public sealed class NetworkSettings
+{
+    /// <summary>Netzwerkname (SSID bzw. Name des LAN-Netzwerks) neben dem Symbol.</summary>
+    public bool ShowName { get; set; } = true;
+
+    /// <summary>Nur WLAN: Signalstärke in Prozent neben dem Symbol.</summary>
+    public bool ShowSignal { get; set; }
+
+    /// <summary>Im Popup eine Schaltfläche zu den Windows-Netzwerkeinstellungen.</summary>
+    public bool ShowSettingsButton { get; set; } = true;
+
+    public NetworkSettings Clone() => (NetworkSettings)MemberwiseClone();
+}
+
+/// <summary>Einstellungen des Lautstärke-Widgets.</summary>
+public sealed class VolumeSettings
+{
+    /// <summary>Wiedergabe- oder Aufnahme-Standardgerät.</summary>
+    public Veyra.Audio.AudioFlow Flow { get; set; } = Veyra.Audio.AudioFlow.Output;
+
+    public bool ShowPercent { get; set; } = true;
+
+    /// <summary>Kleiner Füllbalken neben dem Symbol.</summary>
+    public bool ShowBar { get; set; }
+
+    /// <summary>Lautstärkeänderung je Mausrad-Raste in Prozentpunkten.</summary>
+    public int WheelStep { get; set; } = 2;
+
+    /// <summary>Rechtsklick schaltet stumm (sonst öffnet er das Kontextmenü der Leiste).</summary>
+    public bool RightClickMutes { get; set; } = true;
+
+    /// <summary>Im Regler-Popup die Lautstärke je App (wie im Windows-Lautstärkemixer).</summary>
+    public bool ShowApps { get; set; } = true;
+
+    public VolumeSettings Clone() => (VolumeSettings)MemberwiseClone();
+
+    internal void Normalize()
+    {
+        if (!Enum.IsDefined(Flow)) Flow = Veyra.Audio.AudioFlow.Output;
+        WheelStep = Math.Clamp(WheelStep, 1, 25);
+    }
+}
+
+/// <summary>Ein Timer: Name und Dauer. Der Ablauf (läuft, pausiert) ist Laufzeitzustand und wird nicht gespeichert.</summary>
+public sealed class TimerPreset
+{
+    public string Id { get; set; } = WidgetEntry.NewId();
+    public string Name { get; set; } = "";
+
+    /// <summary>Dauer in Sekunden (1 s bis 99 h).</summary>
+    public int DurationSeconds { get; set; } = 300;
+
+    public const int MaxDurationSeconds = 99 * 3600 + 59 * 60 + 59;
+
+    public TimerPreset Clone() => (TimerPreset)MemberwiseClone();
+}
+
+/// <summary>Signalton nach Ablauf eines Timers (Windows-Systemklänge, sie folgen dem Soundschema).</summary>
+public enum TimerSound
+{
+    None,
+    Alarm,
+    Notification,
+    Reminder,
+}
+
+/// <summary>Einstellungen des Timer-Widgets.</summary>
+public sealed class TimerSettings
+{
+    public List<TimerPreset> Timers { get; set; } = [new() { Name = "Timer 1", DurationSeconds = 300 }];
+
+    /// <summary>Alle laufenden bzw. pausierten Timer auf der Leiste anzeigen; aus = nur den, der als nächster abläuft.</summary>
+    public bool ShowAllActive { get; set; }
+
+    /// <summary>Namen der Timer neben der Restzeit.</summary>
+    public bool ShowName { get; set; }
+
+    /// <summary>Dünner Fortschrittsbalken unter der Restzeit.</summary>
+    public bool ShowProgress { get; set; } = true;
+
+    /// <summary>Windows-Benachrichtigung nach Ablauf.</summary>
+    public bool Notify { get; set; } = true;
+
+    public TimerSound Sound { get; set; } = TimerSound.Alarm;
+
+    public TimerSettings Clone()
+    {
+        var copy = (TimerSettings)MemberwiseClone();
+        copy.Timers = Timers.Select(t => t.Clone()).ToList();
+        return copy;
+    }
+
+    internal void Normalize()
+    {
+        Timers = (Timers ?? []).Where(t => t is not null).ToList();
+        for (int i = 0; i < Timers.Count; i++)
+        {
+            var timer = Timers[i];
+            if (string.IsNullOrWhiteSpace(timer.Id)) timer.Id = WidgetEntry.NewId();
+            timer.Name = string.IsNullOrWhiteSpace(timer.Name) ? $"Timer {i + 1}" : timer.Name.Trim();
+            timer.DurationSeconds = Math.Clamp(timer.DurationSeconds, 1, TimerPreset.MaxDurationSeconds);
+        }
+        foreach (var duplicate in Timers.GroupBy(t => t.Id).SelectMany(g => g.Skip(1)))
+            duplicate.Id = WidgetEntry.NewId();
+        if (!Enum.IsDefined(Sound)) Sound = TimerSound.Alarm;
+    }
+}
+
+/// <summary>Einstellungen der Stoppuhr.</summary>
+public sealed class StopwatchSettings
+{
+    /// <summary>Millisekunden anzeigen (dann wird die Anzeige während des Laufs etwa 20-mal je Sekunde aktualisiert).</summary>
+    public bool ShowMilliseconds { get; set; }
+
+    /// <summary>Stunden auch unter einer Stunde anzeigen ("0:05:12" statt "05:12").</summary>
+    public bool AlwaysShowHours { get; set; }
+
+    /// <summary>Rundenzeiten im Popup erfassen.</summary>
+    public bool EnableLaps { get; set; } = true;
+
+    public StopwatchSettings Clone() => (StopwatchSettings)MemberwiseClone();
+}
+
+/// <summary>Welche Richtungen der Upload-/Download-Monitor zeigt.</summary>
+public enum TrafficDirection
+{
+    Both,
+    Download,
+    Upload,
+}
+
+/// <summary>Einstellungen des Upload-/Download-Monitors.</summary>
+public sealed class TrafficSettings
+{
+    public TrafficDirection Direction { get; set; } = TrafficDirection.Both;
+
+    /// <summary>Download und Upload untereinander statt nebeneinander.</summary>
+    public bool Stacked { get; set; }
+
+    /// <summary>Verlaufsgrafik der letzten Messungen.</summary>
+    public bool ShowGraph { get; set; }
+
+    /// <summary>Bit/s (Mbit/s …) statt Byte/s (MB/s …).</summary>
+    public bool UseBits { get; set; }
+
+    /// <summary>Adapter-GUID wie in <see cref="System.Net.NetworkInformation.NetworkInterface.Id"/>; leer = alle aktiven Adapter.</summary>
+    public string Adapter { get; set; } = "";
+
+    /// <summary>Nur zur Lesbarkeit der JSON-Datei und für die Anzeige, falls der Adapter fehlt.</summary>
+    public string AdapterName { get; set; } = "";
+
+    /// <summary>Aktualisierungsintervall in Millisekunden.</summary>
+    public int IntervalMs { get; set; } = 1000;
+
+    public TrafficSettings Clone() => (TrafficSettings)MemberwiseClone();
+
+    internal void Normalize()
+    {
+        if (!Enum.IsDefined(Direction)) Direction = TrafficDirection.Both;
+        Adapter = Adapter?.Trim() ?? "";
+        AdapterName = Adapter.Length == 0 ? "" : AdapterName?.Trim() ?? "";
+        IntervalMs = Math.Clamp(IntervalMs, 250, 10000);
+    }
+}
+
+/// <summary>Darstellung eines Mess-Widgets (CPU, GPU, RAM, Temperatur).</summary>
+public enum MetricStyle
+{
+    /// <summary>Nur der Wert.</summary>
+    Value,
+
+    /// <summary>Wert und kleiner Füllbalken.</summary>
+    Bar,
+
+    /// <summary>Wert und Verlauf der letzten Minute.</summary>
+    Graph,
+}
+
+/// <summary>Einstellungen eines Mess-Widgets. Farben stehen wie bei Audio-Widgets im <see cref="WidgetEntry"/>.</summary>
+public sealed class MetricSettings
+{
+    public MetricStyle Style { get; set; } = MetricStyle.Bar;
+
+    /// <summary>Kurzbezeichnung ("CPU", "GPU", "RAM") vor dem Wert.</summary>
+    public bool ShowCaption { get; set; } = true;
+
+    /// <summary>Ab 80 % (Temperatur 80 °C) orange, ab 95 % (90 °C) rot.</summary>
+    public bool WarnColors { get; set; } = true;
+
+    /// <summary>Nur RAM: belegte Gigabyte statt Prozent.</summary>
+    public bool ShowAmount { get; set; }
+
+    /// <summary>Nur GPU und Temperatur: Name der Grafikkarte; leer = automatisch (die mit dem meisten Videospeicher).</summary>
+    public string Gpu { get; set; } = "";
+
+    public MetricSettings Clone() => (MetricSettings)MemberwiseClone();
+
+    internal void Normalize()
+    {
+        if (!Enum.IsDefined(Style)) Style = MetricStyle.Bar;
+        Gpu = Gpu?.Trim() ?? "";
+    }
 }
 
 public enum WidgetSlot
@@ -216,9 +493,56 @@ public sealed class WidgetEntry
 
     public const string DefaultIndicatorColor = "#3DAEE9";
 
+    /// <summary>Upload-/Download-Monitor: Uploadfarbe, solange <see cref="IconColor"/> nicht gesetzt ist.</summary>
+    public const string DefaultUploadColor = "#E8A23B";
+
+    /// <summary>
+    /// Nur Audio-Widgets: globales Tastenkürzel, z. B. "Ctrl+Shift+I". Jeder Druck macht das nächste Gerät
+    /// dieses Widgets (von links nach rechts) zum Standard. null = kein Tastenkürzel.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Hotkey { get; set; }
+
+    /// <summary>
+    /// Lautstärke, Timer, Stoppuhr: globale Tastenkürzel je Aktion (<see cref="WidgetHotkeys"/>), z. B.
+    /// { "VolumeUp": "Ctrl+Alt+Up" }. null = keine.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, string>? Hotkeys { get; set; }
+
     /// <summary>Nur Uhren: Format, Schrift und Farben – jede Uhr hat eigene Werte.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ClockSettings? Clock { get; set; }
+
+    /// <summary>Nur Mess-Widgets (CPU, GPU, RAM, Temperatur): Darstellung und Grafikkarte.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public MetricSettings? Metric { get; set; }
+
+    /// <summary>Nur Netzwerk-Widgets.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NetworkSettings? Network { get; set; }
+
+    /// <summary>Nur Lautstärke-Widgets.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public VolumeSettings? Volume { get; set; }
+
+    /// <summary>Nur Timer-Widgets: die Timer dieses Widgets und das Verhalten nach Ablauf.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public TimerSettings? Timer { get; set; }
+
+    /// <summary>Nur Stoppuhren.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public StopwatchSettings? Stopwatch { get; set; }
+
+    /// <summary>Nur Upload-/Download-Monitore.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public TrafficSettings? Traffic { get; set; }
+
+    public static bool IsMetricType(WidgetType type) =>
+        type is WidgetType.Cpu or WidgetType.Gpu or WidgetType.Ram or WidgetType.GpuTemperature;
+
+    [JsonIgnore]
+    public bool IsMetric => IsMetricType(Type);
 
     public const double MinScale = 0.25;
     public const double MaxScale = 8;
@@ -249,9 +573,34 @@ public sealed class WidgetEntry
         {
             Clock = null;
         }
+        if (IsMetric)
+        {
+            Metric ??= new MetricSettings();
+            Metric.Normalize();
+        }
+        else
+        {
+            Metric = null;
+        }
+        Network = Type == WidgetType.Network ? Network ?? new NetworkSettings() : null;
+        Volume = Type == WidgetType.Volume ? Volume ?? new VolumeSettings() : null;
+        Volume?.Normalize();
+        Timer = Type == WidgetType.Timer ? Timer ?? new TimerSettings() : null;
+        Timer?.Normalize();
+        Stopwatch = Type == WidgetType.Stopwatch ? Stopwatch ?? new StopwatchSettings() : null;
+        Traffic = Type == WidgetType.NetworkTraffic ? Traffic ?? new TrafficSettings() : null;
+        Traffic?.Normalize();
         IconColor = ColorUtil.IsValid(IconColor) ? IconColor!.Trim() : null;
         LabelColor = ColorUtil.IsValid(LabelColor) ? LabelColor!.Trim() : null;
         IndicatorColor = ColorUtil.IsValid(IndicatorColor) ? IndicatorColor!.Trim() : null;
+        Hotkey = Type is WidgetType.AudioOutputs or WidgetType.AudioInputs && Core.Hotkey.TryParse(Hotkey, out var hotkey)
+            ? hotkey.ToString()
+            : null;
+        // Nur bekannte Aktionen des Typs mit gültigem Kürzel behalten.
+        var actions = (Hotkeys ?? [])
+            .Where(h => WidgetHotkeys.Find(Type, h.Key) is not null && Core.Hotkey.TryParse(h.Value, out _))
+            .ToDictionary(h => h.Key, h => { Core.Hotkey.TryParse(h.Value, out var parsed); return parsed.ToString(); });
+        Hotkeys = actions.Count > 0 ? actions : null;
         if (!Enum.IsDefined(Slot)) Slot = WidgetSlot.Center;
         OuterMargin = double.IsFinite(OuterMargin) ? Math.Clamp(OuterMargin, 0, 500) : 12;
         InnerSpacing = double.IsFinite(InnerSpacing) ? Math.Clamp(InnerSpacing, 0, 200) : 16;

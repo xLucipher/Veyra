@@ -25,3 +25,11 @@ public interface IBarWidget : IDisposable
     /// <summary>Sofort neu einlesen (z. B. nach Änderung der Systemzeit oder Zeitzone).</summary>
     void Refresh();
 }
+
+/// <summary>Widget mit Aktionen für globale Tastenkürzel (<see cref="WidgetHotkeys"/>). Wird auch aufgerufen, während das Widget angehalten ist.</summary>
+public interface IHotkeyTarget
+{
+    string EntryId { get; }
+
+    void OnHotkey(string action);
+}

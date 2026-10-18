@@ -98,6 +98,38 @@ public sealed class AudioDevicesWidget : ObservableObject, IBarWidget
 
     public void Dispose() => Stop();
 
+    public string EntryId => _entryId;
+
+    private string? _pendingDefault;
+    private DateTime _pendingSinceUtc;
+
+    /// <summary>
+    /// Tastenkürzel: das nächste Gerät dieses Widgets (in der angezeigten Reihenfolge, von links nach rechts)
+    /// zum Standard machen; nach dem letzten geht es wieder beim ersten los. Funktioniert auch, während die
+    /// Leiste bei Vollbild ausgeblendet ist.
+    /// </summary>
+    public void SelectNextDevice()
+    {
+        var devices = VisibleDevices().ToList();
+        if (devices.Count == 0) return;
+
+        // Windows meldet den Wechsel leicht verzögert – bei schnellem Mehrfachdruck vom zuletzt gewählten Gerät weiterzählen.
+        string? current = devices.FirstOrDefault(d => d.IsDefault)?.Id;
+        if (_pendingDefault is not null && DateTime.UtcNow - _pendingSinceUtc < TimeSpan.FromSeconds(2))
+            current = _pendingDefault;
+
+        int index = devices.FindIndex(d => string.Equals(d.Id, current, StringComparison.OrdinalIgnoreCase));
+        var next = devices[(index + 1) % devices.Count];
+        if (string.Equals(next.Id, current, StringComparison.OrdinalIgnoreCase)) return; // nur ein Gerät
+
+        _pendingDefault = next.Id;
+        _pendingSinceUtc = DateTime.UtcNow;
+        _service.SetDefault(next.Id);
+    }
+
+    private IEnumerable<AudioDevice> VisibleDevices() =>
+        _service.GetDevices(_flow).Where(d => _selectedDevices.Count == 0 || _selectedDevices.Contains(d.Id));
+
     private void OnDevicesChanged(object? sender, EventArgs e) => Rebuild();
 
     private void Rebuild()
@@ -107,9 +139,8 @@ public sealed class AudioDevicesWidget : ObservableObject, IBarWidget
         string kind = _flow == AudioFlow.Output ? "Wiedergabegerät" : "Mikrofon";
 
         Items.Clear();
-        foreach (var device in _service.GetDevices(_flow))
+        foreach (var device in VisibleDevices())
         {
-            if (_selectedDevices.Count > 0 && !_selectedDevices.Contains(device.Id)) continue;
             var custom = _audio.Find(device.Id);
 
             string label = string.IsNullOrEmpty(custom?.Label) ? ShortName(device.Name) : custom!.Label;
@@ -125,7 +156,11 @@ public sealed class AudioDevicesWidget : ObservableObject, IBarWidget
                 showLabel ? Visibility.Visible : Visibility.Collapsed,
                 tip,
                 device.IsDefault,
-                new RelayCommand(() => _service.SetDefault(id))));
+                new RelayCommand(() =>
+                {
+                    _pendingDefault = null; // Klick hat Vorrang vor einem eben per Tastenkürzel gewählten Gerät
+                    _service.SetDefault(id);
+                })));
         }
     }
 
