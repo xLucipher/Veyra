@@ -204,7 +204,8 @@ Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwe
 | | `Layer` | `Topmost` | dynamisch: `Topmost`, `Normal` oder `Desktop` (hinter allen Fenstern) |
 | | `LockPosition` | `false` | dynamisch: Verschieben/Größenänderung per Maus sperren |
 | | `FreeWidgetPlacement` | `false` | Widgets (auch die Uhr) frei in beide Richtungen platzieren; Positionen je Widget in `FreeX`/`FreeY` (Anteil von Breite/Höhe, null = normale Anordnung) |
-| | `BackgroundOpacity` / `CornerRadius` | `1` / `12` | dynamisch: Deckkraft 0–1 (0 = durchsichtig, Klicks gehen durch) und Eckenradius |
+| | `BackgroundOpacity` | `1` | Deckkraft 0–1 in beiden Modi (0 = durchsichtig; dynamisch gehen Klicks durch, fixiert bleibt die Leiste klickbar). Fixiert unter 1 wird das Fenster transparent erzeugt |
+| | `CornerRadius` | `12` | dynamisch: Eckenradius |
 | Behavior | `AlwaysOnTop` | `true` | |
 | | `ReserveScreenSpace` | `true` | `true` = AppBar (maximierte Fenster beginnen unter der Leiste), `false` = Overlay |
 | | `AutoHide`, `AutoHideDelayMs` | `false`, `400` | *geplant, in V1 ohne Wirkung* |

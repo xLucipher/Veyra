@@ -121,7 +121,7 @@ public sealed class BarController : IDisposable
         if (bar is null) return;
 
         _viewModel = new TopBarViewModel(() => _openSettings(BarId), _reload, _exit, ToggleLock);
-        var window = new TopBarWindow(_viewModel, bar.Appearance.IsDynamic);
+        var window = new TopBarWindow(_viewModel, bar.Appearance.IsDynamic, bar.Appearance.NeedsTransparency);
         _window = window;
         window.WidgetPanel.WidgetMoved += OnWidgetMoved;
         window.UserBoundsChanged += OnUserBoundsChanged;
@@ -340,6 +340,14 @@ public sealed class BarController : IDisposable
         {
             // Moduswechsel fixiert ↔ dynamisch: anderes Fenster (Transparenz) → Leiste neu aufbauen.
             Log.Info("Bar", $"{bar.Name}: Modus gewechselt: {(bar.Appearance.IsDynamic ? "dynamisch" : "fixiert")}");
+            Rebuild();
+            return;
+        }
+
+        if (_window is not null && _window.IsTransparent != bar.Appearance.NeedsTransparency)
+        {
+            // Fixierte Leiste: Deckkraft 100 % ↔ darunter braucht ein anderes Fenster → Leiste neu aufbauen.
+            Log.Info("Bar", $"{bar.Name}: Transparenz {(bar.Appearance.NeedsTransparency ? "an" : "aus")}");
             Rebuild();
             return;
         }

@@ -269,7 +269,7 @@
                                           SelectedValue="{Binding BarMode}" Width="300" VerticalAlignment="Center" />
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Modus" Style="{StaticResource RowTitle}" />
-                                    <TextBlock Text="Fixiert: oben angedockt über die volle Breite. Dynamisch: frei bewegliches Fenster mit eigener Größe, Transparenz und Ecken – z. B. als Desktop-Uhr." Style="{StaticResource RowHint}" />
+                                    <TextBlock Text="Fixiert: oben angedockt über die volle Breite. Dynamisch: frei bewegliches Fenster mit eigener Größe und Ecken – z. B. als Desktop-Uhr." Style="{StaticResource RowHint}" />
                                 </StackPanel>
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" Visibility="{Binding FixedVisibility}" />
@@ -287,6 +287,20 @@
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Hintergrundfarbe" Style="{StaticResource RowTitle}" />
                                     <TextBlock Text="Farbfeld anklicken für den Farbkreis." Style="{StaticResource RowHint}" />
+                                </StackPanel>
+                            </DockPanel>
+                            <Border Style="{StaticResource Divider}" />
+                            <DockPanel Style="{StaticResource Row}">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Slider x:Name="OpacitySlider" Width="220" Minimum="0" Maximum="1" SmallChange="0.05" LargeChange="0.1"
+                                            IsSnapToTickEnabled="True" TickFrequency="0.05"
+                                            Value="{Binding Bar.Appearance.BackgroundOpacity}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Value, ElementName=OpacitySlider, StringFormat={}{0:P0}}" Width="48" TextAlignment="Right"
+                                               VerticalAlignment="Center" Margin="10,0,0,0" />
+                                </StackPanel>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Hintergrund-Deckkraft" Style="{StaticResource RowTitle}" />
+                                    <TextBlock Text="0 % = komplett durchsichtig – nur die Inhalte (z. B. die Uhr) sind sichtbar. Dynamisch gehen Klicks daneben zum Desktop, die fixierte Leiste bleibt für das Kontextmenü klickbar." Style="{StaticResource RowHint}" />
                                 </StackPanel>
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />
@@ -353,20 +367,6 @@
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Position sperren" Style="{StaticResource RowTitle}" />
                                     <TextBlock Text="Verhindert versehentliches Verschieben und Größenändern. Auch per Rechtsklick auf die Leiste umschaltbar." Style="{StaticResource RowHint}" />
-                                </StackPanel>
-                            </DockPanel>
-                            <Border Style="{StaticResource Divider}" />
-                            <DockPanel Style="{StaticResource Row}">
-                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Slider x:Name="OpacitySlider" Width="220" Minimum="0" Maximum="1" SmallChange="0.05" LargeChange="0.1"
-                                            IsSnapToTickEnabled="True" TickFrequency="0.05"
-                                            Value="{Binding Bar.Appearance.BackgroundOpacity}" VerticalAlignment="Center" />
-                                    <TextBlock Text="{Binding Value, ElementName=OpacitySlider, StringFormat={}{0:P0}}" Width="48" TextAlignment="Right"
-                                               VerticalAlignment="Center" Margin="10,0,0,0" />
-                                </StackPanel>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Hintergrund-Deckkraft" Style="{StaticResource RowTitle}" />
-                                    <TextBlock Text="0 % = komplett durchsichtig – dann sind nur die Inhalte (z. B. die Uhr) sichtbar und greifbar, Klicks daneben gehen zum Desktop." Style="{StaticResource RowHint}" />
                                 </StackPanel>
                             </DockPanel>
                             <Border Style="{StaticResource Divider}" />

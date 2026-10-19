@@ -87,7 +87,8 @@
         </Style>
     </Window.Resources>
 
-    <!-- Fixiert: transparenter Panel-Hintergrund macht die Fläche für das Kontextmenü klickbar.
+    <!-- Fixiert: transparenter Panel-Hintergrund macht die Fläche für das Kontextmenü klickbar; bei Deckkraft
+         unter 100 % zeichnet das Panel den Hintergrund (mindestens 1/255, damit die Fläche klickbar bleibt).
          Dynamisch: Panel zeichnet Hintergrund (mit Deckkraft), Ecken und Rahmen; völlig durchsichtige Stellen
          lassen Klicks zum Desktop durch. -->
     <Border Background="{Binding PanelBackground}"

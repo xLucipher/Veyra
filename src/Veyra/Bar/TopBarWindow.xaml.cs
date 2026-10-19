@@ -39,19 +39,23 @@ public partial class TopBarWindow : Window
         Bottom = 8,
     }
 
-    /// <param name="dynamic">Dynamischer Modus: transparentes, frei bewegliches Fenster. Fixiert: deckendes Fenster (schneller).</param>
-    public TopBarWindow(TopBarViewModel viewModel, bool dynamic)
+    /// <param name="dynamic">Dynamischer Modus: frei bewegliches Fenster. Fixiert: oben angedockt.</param>
+    /// <param name="transparent">Transparentes Fenster (Deckkraft unter 100 % oder dynamisch). Sonst deckend (schneller).</param>
+    public TopBarWindow(TopBarViewModel viewModel, bool dynamic, bool transparent)
     {
         InitializeComponent();
         IsDynamic = dynamic;
-        // Transparenz geht nur vor dem ersten Anzeigen – ein Moduswechsel erzeugt deshalb ein neues Fenster.
-        AllowsTransparency = dynamic;
+        IsTransparent = transparent;
+        // Transparenz geht nur vor dem ersten Anzeigen – ein Wechsel erzeugt deshalb ein neues Fenster.
+        AllowsTransparency = transparent;
         DataContext = viewModel;
     }
 
     public IntPtr Handle { get; private set; }
 
     public bool IsDynamic { get; }
+
+    public bool IsTransparent { get; }
 
     /// <summary>Dynamischer Modus: Verschieben und Größenänderung mit der Maus sperren.</summary>
     public bool IsLocked { get; set; }

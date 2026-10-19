@@ -32,7 +32,7 @@ public sealed class TopBarViewModel : ObservableObject
     public ICommand ExitCommand { get; }
     public ICommand ToggleLockCommand { get; }
 
-    /// <summary>Fixiert: deckende Fensterfarbe. Dynamisch: transparent – das Panel zeichnet Hintergrund und Ecken.</summary>
+    /// <summary>Fixiert voll deckend: Fensterfarbe. Sonst transparent – das Panel zeichnet Hintergrund (mit Deckkraft) und Ecken.</summary>
     public Brush WindowBackground { get => _windowBackground; private set => SetProperty(ref _windowBackground, value); }
     public Brush PanelBackground { get => _panelBackground; private set => SetProperty(ref _panelBackground, value); }
     public CornerRadius CornerRadius { get => _cornerRadius; private set => SetProperty(ref _cornerRadius, value); }
@@ -70,6 +70,16 @@ public sealed class TopBarViewModel : ObservableObject
             CornerRadius = new CornerRadius(a.CornerRadius);
             BorderThickness = new Thickness(a.BorderThickness);
             DynamicMenuVisibility = Visibility.Visible;
+        }
+        else if (a.NeedsTransparency)
+        {
+            // Fixiert mit Deckkraft unter 100 %: transparentes Fenster, das Panel zeichnet den Hintergrund.
+            // Mindestens 1/255 Deckkraft, damit die ganze Leiste für das Kontextmenü klickbar bleibt.
+            WindowBackground = Brushes.Transparent;
+            PanelBackground = ColorUtil.ToBrush(a.BackgroundColor, Color.FromRgb(0x20, 0x21, 0x27), Math.Max(a.BackgroundOpacity, 1 / 255.0));
+            CornerRadius = new CornerRadius(0);
+            BorderThickness = new Thickness(0, 0, 0, a.BorderThickness);
+            DynamicMenuVisibility = Visibility.Collapsed;
         }
         else
         {

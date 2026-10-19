@@ -708,7 +708,7 @@ public sealed class AppearanceSettings
 
     public string BackgroundColor { get; set; } = "#202127";
 
-    /// <summary>Dynamischer Modus: Hintergrund-Deckkraft 0..1 (0 = komplett durchsichtig).</summary>
+    /// <summary>Hintergrund-Deckkraft 0..1 (0 = komplett durchsichtig), in beiden Modi.</summary>
     public double BackgroundOpacity { get; set; } = 1.0;
 
     /// <summary>Dynamischer Modus: Eckenradius.</summary>
@@ -716,6 +716,13 @@ public sealed class AppearanceSettings
 
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsDynamic => Mode == BarMode.Floating;
+
+    /// <summary>
+    /// Fenster braucht Transparenz (Layered-Window): immer im dynamischen Modus, fixiert nur bei Deckkraft unter 100 %.
+    /// Eine voll deckende fixierte Leiste bleibt ein normales Fenster (schneller).
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool NeedsTransparency => IsDynamic || BackgroundOpacity < 1.0;
 
     public string FontFamily { get; set; } = "Segoe UI";
     public string ForegroundColor { get; set; } = "#FFFFFF";
