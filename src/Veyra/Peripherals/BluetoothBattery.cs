@@ -15,17 +15,20 @@ internal static class BluetoothBattery
     private const uint DEVPROP_TYPE_BYTE = 0x3;
     private const uint DEVPROP_TYPE_GUID = 0xD;
     private const uint DEVPROP_TYPE_STRING = 0x12;
+    private const uint DEVPROP_TYPE_STRING_LIST = 0x2012;
     private const uint DN_DEVICE_DISCONNECTED = 0x02000000;
 
     private static DEVPROPKEY BatteryKey = new(new Guid("104EA319-6EE2-4701-BD47-8DDBF425BBE5"), 2);
     private static DEVPROPKEY ContainerKey = new(new Guid("8C7ED206-3F8A-4827-B3AB-AE9E1FAEFC6C"), 2);
     private static DEVPROPKEY FriendlyNameKey = new(new Guid("A45C254E-DF1C-4EFD-8020-67D146A850E0"), 14);
     private static DEVPROPKEY NameKey = new(new Guid("B725F130-47EF-101A-A5F1-02608C9EEBAC"), 10);
+    private static DEVPROPKEY CategoryKey = new(new Guid("78C34FC8-104A-4ACA-9EA4-524D52996E57"), 90); // DEVPKEY_DeviceContainer_Category, z. B. "Input.Mouse"
 
     public static List<BatteryDevice> Read()
     {
         var batteries = new Dictionary<Guid, (int Percent, bool Connected, string Name)>();
         var names = new Dictionary<Guid, string>();
+        var kinds = new Dictionary<Guid, BatteryKind>();
 
         var set = SetupDiGetClassDevsW(IntPtr.Zero, null, IntPtr.Zero, DIGCF_PRESENT | DIGCF_ALLCLASSES);
         if (set == new IntPtr(-1)) return [];
@@ -43,6 +46,7 @@ internal static class BluetoothBattery
                 var container = GuidProperty(set, ref data, ref ContainerKey) ?? Guid.Empty;
                 string name = StringProperty(set, ref data, ref FriendlyNameKey) ?? StringProperty(set, ref data, ref NameKey) ?? "";
                 if (deviceNode && name.Length > 0) names[container] = name;
+                if (deviceNode && Kind(StringListProperty(set, ref data, ref CategoryKey)) is var kind and not BatteryKind.Unknown) kinds[container] = kind;
                 if (battery is not { } percent) continue;
 
                 bool connected = CM_Get_DevNode_Status(out uint status, out _, data.DevInst, 0) == 0 && (status & DN_DEVICE_DISCONNECTED) == 0;
@@ -61,10 +65,39 @@ internal static class BluetoothBattery
             .Select(b =>
             {
                 string name = names.GetValueOrDefault(b.Key) ?? (b.Value.Name.Length > 0 ? b.Value.Name : "Bluetooth-Gerät");
-                return new BatteryDevice("bt:" + name, name, BatterySource.Bluetooth, b.Value.Percent, null);
+                return new BatteryDevice("bt:" + name, name, BatterySource.Bluetooth, b.Value.Percent, null, kinds.GetValueOrDefault(b.Key));
             })
             .DistinctBy(d => d.Key)
             .ToList();
+    }
+
+    /// <summary>Geräteart aus der Windows-Kategorie des Geräts ("Input.Mouse", "Audio.Headset" …).</summary>
+    private static BatteryKind Kind(IEnumerable<string> categories)
+    {
+        foreach (var c in categories)
+        {
+            if (c.Contains("Mouse", StringComparison.OrdinalIgnoreCase)) return BatteryKind.Mouse;
+            if (c.Contains("Keyboard", StringComparison.OrdinalIgnoreCase)) return BatteryKind.Keyboard;
+            if (c.Contains("Gaming", StringComparison.OrdinalIgnoreCase) || c.Contains("Gamepad", StringComparison.OrdinalIgnoreCase)) return BatteryKind.Controller;
+            if (c.Contains("Pen", StringComparison.OrdinalIgnoreCase) || c.Contains("Digitizer", StringComparison.OrdinalIgnoreCase)) return BatteryKind.Pen;
+            if (c.StartsWith("Audio", StringComparison.OrdinalIgnoreCase)) return BatteryKind.Headset;
+        }
+        return BatteryKind.Unknown;
+    }
+
+    private static unsafe List<string> StringListProperty(IntPtr set, ref SP_DEVINFO_DATA data, ref DEVPROPKEY key)
+    {
+        char* buffer = stackalloc char[512];
+        if (!SetupDiGetDevicePropertyW(set, ref data, ref key, out uint type, (byte*)buffer, 1024, out _, 0) || type != DEVPROP_TYPE_STRING_LIST) return [];
+        var result = new List<string>();
+        for (int start = 0, i = 0; i < 512; i++)
+        {
+            if (buffer[i] != '\0') continue;
+            if (i == start) break; // doppelte Null: Ende der Liste
+            result.Add(new string(buffer, start, i - start));
+            start = i + 1;
+        }
+        return result;
     }
 
     private static unsafe string InstanceId(IntPtr set, ref SP_DEVINFO_DATA data)

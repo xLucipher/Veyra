@@ -6,21 +6,30 @@ namespace Veyra.Peripherals;
 public enum BatterySource
 {
     Bluetooth,
-    Razer,
+    Receiver,
 }
 
-/// <param name="Key">Kennung für die Geräteauswahl ("bt:Name" bzw. "razer:Name") – bleibt über Neuverbindungen gleich.</param>
-/// <param name="Charging">null = unbekannt (Bluetooth meldet das nicht).</param>
-public sealed record BatteryDevice(string Key, string Name, BatterySource Source, int Percent, bool? Charging)
+/// <summary>Geräteart für das Symbol – laut Windows bzw. den HID-Schnittstellen des Geräts.</summary>
+public enum BatteryKind
 {
-    public string SourceName => Source == BatterySource.Bluetooth ? "Bluetooth" : "Razer";
+    Unknown,
+    Mouse,
+    Keyboard,
+    Headset,
+    Controller,
+    Pen,
+}
 
+/// <param name="Key">Kennung für die Geräteauswahl ("bt:Name" bzw. "rx:Name") – bleibt über Neuverbindungen gleich.</param>
+/// <param name="Charging">null = unbekannt (Bluetooth meldet das nicht).</param>
+public sealed record BatteryDevice(string Key, string Name, BatterySource Source, int Percent, bool? Charging, BatteryKind Kind = BatteryKind.Unknown)
+{
     /// <summary>Name aus der Kennung, für gewählte Geräte, die gerade nicht verbunden sind.</summary>
     public static string NameFromKey(string key) => key.IndexOf(':') is var i and >= 0 ? key[(i + 1)..] : key;
 }
 
 /// <summary>
-/// Akkustände aller Quellen für alle Geräte-Akku-Widgets. Gelesen wird im Hintergrund (Razer-Abfragen dauern je Gerät
+/// Akkustände aller Quellen für alle Geräte-Akku-Widgets. Gelesen wird im Hintergrund (Abfragen über Funk-Empfänger dauern je Gerät
 /// einige Millisekunden) einmal pro Minute, nur solange ein Widget läuft. Nur ein Lesevorgang gleichzeitig – auch
 /// zusammen mit der Geräteliste im Einstellungsfenster –, damit sich keine Anfragen an ein Gerät überschneiden.
 /// </summary>
@@ -28,7 +37,7 @@ public sealed class DeviceBatteryService : IDisposable
 {
     private static readonly SemaphoreSlim ReadLock = new(1, 1);
 
-    private readonly Dictionary<object, (bool Bluetooth, bool Razer)> _users = [];
+    private readonly Dictionary<object, (bool Bluetooth, bool Receiver)> _users = [];
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(60) };
     private bool _reading;
 
@@ -44,11 +53,11 @@ public sealed class DeviceBatteryService : IDisposable
 
     public event EventHandler? Changed;
 
-    public void Acquire(object owner, bool bluetooth, bool razer)
+    public void Acquire(object owner, bool bluetooth, bool receiver)
     {
         bool first = _users.Count == 0;
-        bool newSource = !_users.TryGetValue(owner, out var old) || (bluetooth && !old.Bluetooth) || (razer && !old.Razer);
-        _users[owner] = (bluetooth, razer);
+        bool newSource = !_users.TryGetValue(owner, out var old) || (bluetooth && !old.Bluetooth) || (receiver && !old.Receiver);
+        _users[owner] = (bluetooth, receiver);
         if (first) _timer.Start();
         if (first || newSource) _ = RefreshAsync();
     }
@@ -63,10 +72,10 @@ public sealed class DeviceBatteryService : IDisposable
         if (_reading || _users.Count == 0) return;
         _reading = true;
         bool bluetooth = _users.Values.Any(u => u.Bluetooth);
-        bool razer = _users.Values.Any(u => u.Razer);
+        bool receiver = _users.Values.Any(u => u.Receiver);
         try
         {
-            Devices = await ReadAsync(bluetooth, razer);
+            Devices = await ReadAsync(bluetooth, receiver);
             HasRead = true;
         }
         finally
@@ -77,7 +86,7 @@ public sealed class DeviceBatteryService : IDisposable
     }
 
     /// <summary>Einmal alle Geräte lesen (auch für die Geräteauswahl in den Einstellungen).</summary>
-    public static async Task<IReadOnlyList<BatteryDevice>> ReadAsync(bool bluetooth = true, bool razer = true)
+    public static async Task<IReadOnlyList<BatteryDevice>> ReadAsync(bool bluetooth = true, bool receiver = true)
     {
         await ReadLock.WaitAsync();
         try
@@ -86,7 +95,7 @@ public sealed class DeviceBatteryService : IDisposable
             {
                 var devices = new List<BatteryDevice>();
                 if (bluetooth) devices.AddRange(Safe(BluetoothBattery.Read, "Bluetooth"));
-                if (razer) devices.AddRange(Safe(RazerHid.Read, "Razer"));
+                if (receiver) devices.AddRange(Safe(ReceiverHid.Read, "Funk-Empfänger"));
                 return (IReadOnlyList<BatteryDevice>)devices.OrderBy(d => d.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
             });
         }

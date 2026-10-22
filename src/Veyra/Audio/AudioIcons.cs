@@ -130,7 +130,7 @@ public static class AudioIcons
         if (input && Has("xlr", "interface", "focusrite", "scarlett", "goxlr", "umc", "audient", "motu", "steinberg")) return "AudioInterface";
         if (input && Has("yeti", "quadcast", "wave:", "seiren", "snowball", "fifine", "podmic", "usb")) return "DeskMic";
         if (Has("headset", "hands-free", "freisprech")) return "Headset";
-        if (Has("airpods", "buds", "earbuds", "in-ear")) return input ? "Headset" : "Earbuds";
+        if (Has("buds", "earbuds", "in-ear")) return input ? "Headset" : "Earbuds";
         if (Has("kopfhörer", "headphone")) return input ? "Headset" : "StudioHeadphones";
         if (Has("bluetooth")) return "Bluetooth";
 

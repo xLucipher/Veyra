@@ -1289,14 +1289,14 @@
                                                 <CheckBox DockPanel.Dock="Right" IsChecked="{Binding DeviceBattery.Bluetooth}" VerticalAlignment="Center" />
                                                 <StackPanel VerticalAlignment="Center">
                                                     <TextBlock Text="Bluetooth-Geräte" Style="{StaticResource RowTitle}" />
-                                                    <TextBlock Text="Verbundene Geräte, deren Akku Windows kennt (wie unter Einstellungen → Bluetooth) – Mäuse, Tastaturen, Kopfhörer, Controller." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="Maus, Tastatur, Headset und Controller über Bluetooth – mit dem Akkustand, den auch Windows anzeigt." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
                                                 </StackPanel>
                                             </DockPanel>
                                             <DockPanel Style="{StaticResource Row}">
-                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding DeviceBattery.Razer}" VerticalAlignment="Center" />
+                                                <CheckBox DockPanel.Dock="Right" IsChecked="{Binding DeviceBattery.Receiver}" VerticalAlignment="Center" />
                                                 <StackPanel VerticalAlignment="Center">
-                                                    <TextBlock Text="Razer-Geräte" Style="{StaticResource RowTitle}" />
-                                                    <TextBlock Text="Kabellose Razer-Mäuse und -Tastaturen über HyperSpeed-Dongle oder Kabel sowie das Headset BlackShark V2 Pro, direkt am Gerät gelesen – Synapse ist nicht nötig. Andere Razer-Headsets werden noch nicht erkannt." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="Geräte mit Funk-Empfänger" Style="{StaticResource RowTitle}" />
+                                                    <TextBlock Text="Maus, Tastatur und Headset mit eigenem Funk-Empfänger (Dongle) oder per Kabel – direkt am Gerät gelesen." Style="{StaticResource RowHint}" TextWrapping="Wrap" />
                                                 </StackPanel>
                                             </DockPanel>
                                             <DockPanel Style="{StaticResource Row}">

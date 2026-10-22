@@ -602,7 +602,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         return created;
     }
 
-    /// <summary>Gerätewahl des Geräte-Akku-Widgets: Geräte im Hintergrund lesen (Razer-Abfragen dauern einen Moment).</summary>
+    /// <summary>Gerätewahl des Geräte-Akku-Widgets: Geräte im Hintergrund lesen (Abfragen über Funk-Empfänger dauern einen Moment).</summary>
     private static async Task FillBatteryDevicesAsync(WidgetRowViewModel row)
     {
         var devices = await Peripherals.DeviceBatteryService.ReadAsync();

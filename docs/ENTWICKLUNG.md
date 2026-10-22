@@ -53,7 +53,7 @@ src/Veyra/
 │  ├─ FlyoutWindow.cs         Basis aller Widget-Popups: Platzierung unter/über dem Widget, Schließen bei Klick daneben oder Esc, optional mit der Maus verschiebbar (Kalender, Timer)
 │  ├─ Clock/                  Uhr (ClockWidget, ClockView), Kalender-Flyout, Weltuhr
 │  ├─ Audio/                  Audiogeräte-Buttons (Wiedergabe/Mikrofon)
-│  ├─ Metrics/                CPU, GPU, RAM, GPU-Temperatur, VRAM, GPU-Takt, GPU-Lüfter, Akku, Laufwerk: Wert, Balken oder Verlauf; Geräte-Akku (Bluetooth, Razer); FPS
+│  ├─ Metrics/                CPU, GPU, RAM, GPU-Temperatur, VRAM, GPU-Takt, GPU-Lüfter, Akku, Laufwerk: Wert, Balken oder Verlauf; Geräte-Akku (Bluetooth, Funk-Empfänger); FPS
 │  ├─ Media/                  Medien: Titel, Cover, Zurück/Wiedergabe/Weiter; Auswahl der Wiedergabe (MediaFlyout), durchlaufender Text (MarqueeText)
 │  ├─ Content/                Bild, Notiz (mit Bearbeiten-Popup), Trennlinie
 │  ├─ ClipboardHistory/       Zwischenablage-Verlauf (Popup mit Suche, Anheften, Einfügen)
@@ -69,7 +69,7 @@ src/Veyra/
 ├─ Timing/                    TimerService: Zustand aller Timer und Stoppuhren, ein Zeitgeber auf den nächsten Ablauf
 ├─ ClipboardHistory/          ClipboardHistoryService: Verlauf der Zwischenablage (AddClipboardFormatListener)
 ├─ Weather/                   WeatherService: Open-Meteo (Ortssuche, Vorhersage), WMO-Wettercodes
-├─ Peripherals/               DeviceBatteryService: Akkustände; BluetoothBattery (SetupAPI), RazerHid (HID-Feature-Reports)
+├─ Peripherals/               DeviceBatteryService: Akkustände; BluetoothBattery (SetupAPI), ReceiverHid (Geräte mit Funk-Empfänger, HID-Feature-Reports), Geräteart für das Symbol
 ├─ Gaming/                    FPS: PresentTracer (ETW-Echtzeitsitzung „Veyra FPS“), FpsService (FPS, Frametime, 1 % Low), FpsPermission (Gruppe, UAC)
 ├─ Sensors/                   Systemwerte ohne Zusatzsoftware: GetSystemTimes, GlobalMemoryStatusEx, PDH (GPU), DXGI, D3DKMT (GPU-Temperatur, -Takt, -Lüfter), GetSystemPowerStatus (Akku), GetDiskFreeSpaceEx (Laufwerke)
 ├─ Updates/                   Update-Prüfung über GitHub Releases, Update-Fenster, Installation
@@ -117,7 +117,7 @@ Bewusst flach gehalten: keine DI-Container, keine Service-Locator, keine Abstrak
 | Akku, Laufwerke | `GetSystemPowerStatus`, `GetDiskFreeSpaceEx`, `GetDriveType` | Akku im Sekundentakt des `SystemMonitor`, Laufwerke höchstens alle 30 s; Netzlaufwerke werden nicht abgefragt |
 | Zwischenablage | `AddClipboardFormatListener` (`WM_CLIPBOARDUPDATE`), Formate `ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory`, `Clipboard Viewer Ignore`; Einfügen: `SetForegroundWindow` + `SendInput` (Strg + V) | ereignisbasiert; vertrauliche Inhalte (Passwortmanager) werden übersprungen; Verlauf nur im Arbeitsspeicher, Bilder höchstens 5 |
 | Geräte-Akku Bluetooth | `SetupDiGetClassDevs` + `SetupDiGetDeviceProperty` (`DEVPKEY_Bluetooth_Battery` = `{104EA319-6EE2-4701-BD47-8DDBF425BBE5},2`), Container-ID, `CM_Get_DevNode_Status` (`DN_DEVICE_DISCONNECTED`) | derselbe Wert wie unter Einstellungen → Bluetooth; getrennte Geräte werden ausgelassen |
-| Geräte-Akku Razer | HID (`HidD_SetFeature`/`HidD_GetFeature`, 90-Byte-Report, Klasse `0x07`, Befehle `0x80` Akkustand, `0x84` Laden), Gerät ohne Lese-/Schreibrecht geöffnet | nur Lese-Befehle; Transaktions-ID je Gerät ausprobiert und gemerkt; Status `0x05` (kein Akku) → 30 min Ruhe, `0x04` (Gerät aus oder per Bluetooth verbunden) → 2 min; ein Lesevorgang gleichzeitig, im Hintergrund alle 60 s |
+| Geräte-Akku Funk-Empfänger | HID (`HidD_SetFeature`/`HidD_GetFeature`, 90-Byte-Report, Klasse `0x07`, Befehle `0x80` Akkustand, `0x84` Laden), Gerät ohne Lese-/Schreibrecht geöffnet; Headset-Empfänger: 64-Byte-Report mit Report-ID `0xFF` | nur Lese-Befehle; Transaktions-ID je Gerät ausprobiert und gemerkt; Status `0x05` (kein Akku) → 30 min Ruhe, `0x04` (Gerät aus oder per Bluetooth verbunden) → 2 min; ein Lesevorgang gleichzeitig, im Hintergrund alle 60 s; Geräteart aus den HID-Schnittstellen (Maus `1/2`, Tastatur `1/6`), bei Bluetooth aus `DEVPKEY_DeviceContainer_Category` |
 | Helligkeit | dxva2 (`GetPhysicalMonitorsFromHMONITOR`, `GetMonitorBrightness`, `SetMonitorBrightness`), Laptop: `IOCTL_VIDEO_SET_DISPLAY_BRIGHTNESS` auf `\\.\LCD`; Monitornamen über `QueryDisplayConfig`/`DisplayConfigGetDeviceInfo` | DDC/CI braucht rund 50 ms je Befehl → eigener Thread, je Monitor wird nur der letzte Zielwert gesendet; gleich heißende Monitore werden durchnummeriert |
 | Nachtmodus | `GetDeviceGammaRamp`/`SetDeviceGammaRamp` je Monitor | Farbtemperatur → Gamma-Tabelle; lehnt Windows sie ab, wird in 200-K-Schritten wärmer begrenzt; ursprüngliche Tabelle wird beim Ausschalten, Beenden und im Absturzpfad zurückgeschrieben; nach Anzeigeänderungen, Entsperren und alle 2 min erneut gesetzt |
 | Wetter, öffentliche IP | HTTPS: `api.open-meteo.com`, `geocoding-api.open-meteo.com`; `api.ipify.org` (IPv4), `api6.ipify.org` (IPv6); `NetworkChange.NetworkAddressChanged` | nur solange ein Widget läuft; Wetter wird 5 min zwischengespeichert (mehrere Widgets, gleicher Ort) |
@@ -279,7 +279,7 @@ Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwe
 | Bars[].Widgets[].WorldClock | `Zones[]` (`Id`, `TimeZoneId`, `Label`), `TimeFormat`, `ShowLabels`, `ShowAllInBar`, `ShowDayOffset` | New York, Tokio, `HH:mm`, `true`, `true`, `true` | Weltuhr; `TimeZoneId` = Windows-Zeitzonen-ID, z. B. `Eastern Standard Time`; Farben: `IconColor` Ortsnamen, `LabelColor` Uhrzeiten |
 | Bars[].Widgets[].Launcher | `Items[]` (`Id`, `Path`, `Arguments`, `Name`), `ShowNames`, `IconSize` | –, `false`, `20` | Schnellstart; `Path` = Programm, Datei, Ordner oder Webadresse |
 | Bars[].Widgets[].Weather | `LocationName`, `Latitude`, `Longitude`, `Unit`, `WindUnit`, `IntervalMinutes`, `ShowCondition`, `ShowHighLow`, `ShowLocation` | –, –, –, `Celsius`, `KilometersPerHour`, `30`, `false`, `false`, `false` | Wetter; `WindUnit`: `KilometersPerHour`, `MetersPerSecond`, `MilesPerHour` |
-| Bars[].Widgets[].DeviceBattery | `Bluetooth`, `Razer`, `ShowNames`, `WarnLevel`, `NotifyLow` | `true`, `true`, `false`, `20`, `true` | Geräte-Akku; gezeigte Geräte in `Devices` (`bt:Name` bzw. `razer:Name`, leer = alle) |
+| Bars[].Widgets[].DeviceBattery | `Bluetooth`, `Receiver`, `ShowNames`, `WarnLevel`, `NotifyLow` | `true`, `true`, `false`, `20`, `true` | Geräte-Akku; gezeigte Geräte in `Devices` (`bt:Name` bzw. `rx:Name`, leer = alle); `Receiver` = Geräte mit eigenem Funk-Empfänger |
 | Bars[].Widgets[].PublicIp | `Show`, `ShowLabel`, `Mask`, `IntervalMinutes` | `IPv4`, `true`, `false`, `15` | öffentliche IP; `Show`: `IPv4`, `IPv6`, `Both` |
 | Bars[].Widgets[].Brightness | `WheelStep`, `ShowPercent`, `NightTemperature`, `NightMode`, `NightSchedule`, `NightFrom`, `NightTo` | `5`, `true`, `3400`, `false`, `false`, `21:00`, `07:00` | Helligkeit & Nachtmodus; `NightTemperature` 2700–6500 K; Tastenkürzel `BrightnessUp`, `BrightnessDown`, `ToggleNightMode` |
 | Bars[].Widgets[].Fps | `ShowFrameTime`, `ShowOnePercentLow`, `ShowProcess`, `WarnBelow` | `false`, `false`, `false`, `30` | FPS; unter `WarnBelow` rot, bis zum Doppelten orange, 0 = aus |
@@ -308,4 +308,4 @@ Datei: `%AppData%\Veyra\settings.json` – wird beim ersten Start mit Standardwe
 
 - **Dynamischer Modus:** optional Mica/Acrylic-Hintergrund über `DWMWA_SYSTEMBACKDROP_TYPE`, Einrasten an Bildschirmrändern.
 - **Auto-Hide:** Fläche außerhalb des sichtbaren Bereichs parken, Einblenden über einen 1-px-Auslöserstreifen am oberen Rand; während Vollbild deaktiviert.
-- **Weitere Widgets:** `IBarWidget` implementieren, Typ in `WidgetType`/`WidgetCatalog` eintragen und in `BarController.CreateWidgets` erzeugen; fest oder frei legt `WidgetEntry.IsFixedType` fest. Kandidaten: virtuelle Desktops, Akkustand weiterer Razer-Headsets und von Logitech-Geräten (HID++).
+- **Weitere Widgets:** `IBarWidget` implementieren, Typ in `WidgetType`/`WidgetCatalog` eintragen und in `BarController.CreateWidgets` erzeugen; fest oder frei legt `WidgetEntry.IsFixedType` fest. Kandidaten: virtuelle Desktops, Akkustand weiterer kabelloser Geräte mit Funk-Empfänger.

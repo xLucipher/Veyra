@@ -299,7 +299,7 @@ public enum WidgetType
     /// <summary>Aktuelles Wetter und Vorhersage (Open-Meteo, ohne Konto).</summary>
     Weather,
 
-    /// <summary>Akkustand von Bluetooth-Geräten und kabellosen Razer-Geräten.</summary>
+    /// <summary>Akkustand kabelloser Geräte (Bluetooth oder eigener Funk-Empfänger).</summary>
     DeviceBattery,
 
     /// <summary>Öffentliche IPv4- und IPv6-Adresse.</summary>
@@ -1051,8 +1051,8 @@ public sealed class DeviceBatterySettings
     /// <summary>Bluetooth-Geräte, deren Akkustand Windows kennt (wie unter Einstellungen → Bluetooth).</summary>
     public bool Bluetooth { get; set; } = true;
 
-    /// <summary>Kabellose Razer-Mäuse und -Tastaturen über Dongle oder Kabel (direkt am Gerät abgefragt).</summary>
-    public bool Razer { get; set; } = true;
+    /// <summary>Geräte mit eigenem Funk-Empfänger (Dongle) oder per Kabel, direkt am Gerät abgefragt.</summary>
+    public bool Receiver { get; set; } = true;
 
     /// <summary>Ab diesem Ladestand (Prozent) orange; ab der Hälfte davon rot.</summary>
     public int WarnLevel { get; set; } = 20;

@@ -13,7 +13,7 @@ namespace Veyra.Widgets.Metrics;
 public sealed record DeviceBatteryRow(string Name, string Detail, string Glyph, string Percent, double Fraction, Brush Brush);
 
 /// <summary>
-/// Akkustand von Bluetooth-Geräten und kabellosen Razer-Geräten: je Gerät ein Symbol (Maus, Tastatur, Headset …) mit
+/// Akkustand kabelloser Geräte (Bluetooth oder eigener Funk-Empfänger): je Gerät ein Symbol (Maus, Tastatur, Headset …) mit
 /// Prozentwert, bei wenig Akku orange bzw. rot – auf Wunsch mit Windows-Benachrichtigung. Klick zeigt alle gefundenen
 /// Geräte. Die Werte liest der gemeinsame <see cref="DeviceBatteryService"/>.
 /// </summary>
@@ -50,12 +50,10 @@ public sealed class DeviceBatteryWidget : ObservableObject, IBarWidget
     public IReadOnlyList<DeviceBatteryRow> Rows { get; private set; } = [];
     public Visibility EmptyVisibility => Rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-    public string Sources => (_battery.Bluetooth, _battery.Razer) switch
+    public string Sources => (_battery.Bluetooth, _battery.Receiver) switch
     {
-        (true, true) => "Bluetooth und Razer · alle 60 Sekunden",
-        (true, false) => "Bluetooth · alle 60 Sekunden",
-        (false, true) => "Razer · alle 60 Sekunden",
-        _ => "Keine Quelle eingeschaltet (Einstellungen des Widgets)",
+        (false, false) => "Keine Quelle eingeschaltet (Einstellungen des Widgets)",
+        _ => "Aktualisiert alle 60 Sekunden",
     };
 
     public void ApplySettings(AppSettings settings, BarSettings bar)
@@ -68,7 +66,7 @@ public sealed class DeviceBatteryWidget : ObservableObject, IBarWidget
         _textBrush = entry?.LabelColor is { } label ? ColorUtil.ToBrush(label, Colors.White) : barForeground;
         _barBrush = ColorUtil.ToBrush(entry?.IndicatorColor ?? WidgetEntry.DefaultIndicatorColor, Colors.DeepSkyBlue);
         _fontFamily = new FontFamily(bar.Appearance.FontFamily);
-        if (_running) _service.Acquire(this, _battery.Bluetooth, _battery.Razer);
+        if (_running) _service.Acquire(this, _battery.Bluetooth, _battery.Receiver);
         Update();
     }
 
@@ -77,7 +75,7 @@ public sealed class DeviceBatteryWidget : ObservableObject, IBarWidget
         if (_running) return;
         _running = true;
         _service.Changed += OnChanged;
-        _service.Acquire(this, _battery.Bluetooth, _battery.Razer);
+        _service.Acquire(this, _battery.Bluetooth, _battery.Receiver);
         Update();
     }
 
@@ -102,7 +100,7 @@ public sealed class DeviceBatteryWidget : ObservableObject, IBarWidget
     private void OnChanged(object? sender, EventArgs e) => Update();
 
     private IEnumerable<BatteryDevice> Visible => _service.Devices.Where(d =>
-        (d.Source == BatterySource.Bluetooth ? _battery.Bluetooth : _battery.Razer) &&
+        (d.Source == BatterySource.Bluetooth ? _battery.Bluetooth : _battery.Receiver) &&
         (_selected.Count == 0 || _selected.Contains(d.Key, StringComparer.OrdinalIgnoreCase)));
 
     private void Update()
@@ -120,7 +118,7 @@ public sealed class DeviceBatteryWidget : ObservableObject, IBarWidget
         {
             var device = devices[i];
             var brush = WarnBrush(device) ?? _textBrush;
-            var icon = Glyph(DeviceGlyph(device.Name), _iconBrush);
+            var icon = Glyph(DeviceGlyph(device), _iconBrush);
             icon.Margin = new Thickness(i == 0 ? 0 : 12, 0, 0, 0);
             _panel.Children.Add(icon);
             if (_battery.ShowNames) _panel.Children.Add(Text(device.Name, _textBrush, 0.75, maxWidth: 150));
@@ -136,11 +134,11 @@ public sealed class DeviceBatteryWidget : ObservableObject, IBarWidget
 
         _view.ToolTip = devices.Count == 0
             ? (_service.HasRead ? "Kein Gerät mit Akkustand gefunden" : "Akkustände werden gelesen …") + "\nKlicken für Details"
-            : string.Join("\n", devices.Select(d => $"{d.Name}: {d.Percent} %{(d.Charging == true ? " (lädt)" : "")} · {d.SourceName}")) + "\nKlicken für Details";
+            : string.Join("\n", devices.Select(d => $"{d.Name}: {d.Percent} %{(d.Charging == true ? " (lädt)" : "")}")) + "\nKlicken für Details";
 
         Rows = _service.Devices
-            .Where(d => d.Source == BatterySource.Bluetooth ? _battery.Bluetooth : _battery.Razer)
-            .Select(d => new DeviceBatteryRow(d.Name, d.SourceName + (d.Charging == true ? " · lädt" : ""), DeviceGlyph(d.Name),
+            .Where(d => d.Source == BatterySource.Bluetooth ? _battery.Bluetooth : _battery.Receiver)
+            .Select(d => new DeviceBatteryRow(d.Name, d.Charging == true ? "Lädt" : "", DeviceGlyph(d),
                 $"{d.Percent} %", d.Percent / 100.0, WarnBrush(d) ?? _barBrush))
             .ToList();
         OnPropertyChanged(nameof(Rows));
@@ -174,16 +172,29 @@ public sealed class DeviceBatteryWidget : ObservableObject, IBarWidget
         }
     }
 
-    /// <summary>Symbol nach Gerätename (Maus, Tastatur, Headset, Controller), sonst Bluetooth.</summary>
-    internal static string DeviceGlyph(string name)
+    /// <summary>Symbol nach Geräteart (Windows-Kategorie bzw. HID-Schnittstelle), sonst nach allgemeinen Wörtern im Namen.</summary>
+    internal static string DeviceGlyph(BatteryDevice device)
     {
-        bool Has(params string[] words) => words.Any(w => name.Contains(w, StringComparison.OrdinalIgnoreCase));
-        if (Has("mouse", "maus", "basilisk", "deathadder", "viper", "naga", "orochi", "bsk", "mx master", "mx anywhere", "g pro", "g502", "g305")) return "";
-        if (Has("keyboard", "tastatur", "huntsman", "blackwidow", "ornata", "deathstalker", "keys")) return "";
-        if (Has("headset", "kopfhörer", "headphone", "buds", "airpods", "kraken", "blackshark", "barracuda", "hammerhead", "wh-", "wf-", "earbuds")) return "";
-        if (Has("controller", "gamepad", "xbox", "dualsense", "dualshock", "wolverine")) return "";
-        if (Has("pen", "stift")) return "";
-        return "";
+        var kind = device.Kind;
+        if (kind == BatteryKind.Unknown)
+        {
+            bool Has(params string[] words) => words.Any(w => device.Name.Contains(w, StringComparison.OrdinalIgnoreCase));
+            kind = Has("mouse", "maus") ? BatteryKind.Mouse
+                : Has("keyboard", "tastatur") ? BatteryKind.Keyboard
+                : Has("headset", "kopfhörer", "headphone", "buds") ? BatteryKind.Headset
+                : Has("controller", "gamepad") ? BatteryKind.Controller
+                : Has("pen", "stift") ? BatteryKind.Pen
+                : BatteryKind.Unknown;
+        }
+        return kind switch
+        {
+            BatteryKind.Mouse => "",
+            BatteryKind.Keyboard => "",
+            BatteryKind.Headset => "",
+            BatteryKind.Controller => "",
+            BatteryKind.Pen => "",
+            _ => "",
+        };
     }
 
     private TextBlock Glyph(string glyph, Brush brush)

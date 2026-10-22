@@ -52,7 +52,7 @@ public static class WidgetCatalog
         new(WidgetType.Launcher, "Schnellstart", "Programme, Ordner, Dateien und Webadressen per Klick öffnen – Dateien einfach auf das Widget ziehen", ""),
         new(WidgetType.Weather, "Wetter", "Temperatur und Wetterlage für deinen Ort, im Popup mit Stunden- und 7-Tage-Vorhersage", "",
             "M7.5 19h9.5a4 4 0 0 0 .4-8 5.5 5.5 0 0 0-10.6 1.4A3.3 3.3 0 0 0 7.5 19zM5.5 8.5a3.5 3.5 0 0 1 6-2.4M8.5 2.5v1.2M3.2 5l.9.8M2 9.5h1.2"),
-        new(WidgetType.DeviceBattery, "Geräte-Akku", "Akkustand von Bluetooth-Geräten und kabellosen Razer-Mäusen und -Tastaturen, mit Warnung bei wenig Akku", ""),
+        new(WidgetType.DeviceBattery, "Geräte-Akku", "Akkustand von Maus, Tastatur, Headset und Controller, mit Warnung bei wenig Akku", ""),
         new(WidgetType.PublicIp, "Öffentliche IP", "Deine öffentliche IPv4- und IPv6-Adresse – auf Wunsch verborgen, z. B. beim Streamen; Klick zeigt und kopiert", ""),
         new(WidgetType.Brightness, "Helligkeit & Nachtmodus", "Bildschirmhelligkeit per Mausrad oder Regler, Nachtmodus mit warmem Licht – auch nach Zeitplan", ""),
     ];
@@ -499,7 +499,7 @@ public sealed class WidgetRowViewModel : ObservableObject
             {
                 var sources = new List<string>();
                 if (DeviceBattery.Bluetooth) sources.Add("Bluetooth");
-                if (DeviceBattery.Razer) sources.Add("Razer");
+                if (DeviceBattery.Receiver) sources.Add("Funk-Empfänger");
                 parts.Add(sources.Count == 0 ? "keine Quelle" : string.Join(" + ", sources));
                 parts.Add(AllBatteryDevices ? "alle Geräte" : $"{BatteryDevices.Count(d => d.Selected)} Gerät(e)");
             }
@@ -1007,7 +1007,7 @@ public sealed class WidgetRowViewModel : ObservableObject
         var selected = _entry.Devices;
         BatteryDevices.Clear();
         foreach (var device in found)
-            BatteryDevices.Add(new DeviceChoice(device.Key, $"{device.Name}  ·  {device.SourceName}", "", connected: true,
+            BatteryDevices.Add(new DeviceChoice(device.Key, device.Name, "", connected: true,
                 selected: _allBatteryDevices || selected.Contains(device.Key, StringComparer.OrdinalIgnoreCase)));
         foreach (var missing in selected.Where(k => found.All(d => !d.Key.Equals(k, StringComparison.OrdinalIgnoreCase))))
             BatteryDevices.Add(new DeviceChoice(missing, Veyra.Peripherals.BatteryDevice.NameFromKey(missing), "", connected: false, selected: true));

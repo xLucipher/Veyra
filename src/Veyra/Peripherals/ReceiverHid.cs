@@ -5,14 +5,14 @@ using Veyra.Core;
 namespace Veyra.Peripherals;
 
 /// <summary>
-/// Akkustand kabelloser Razer-Mäuse und -Tastaturen direkt am Gerät – ohne Synapse. Razer-Geräte (VID 1532) haben
-/// eine Steuerschnittstelle mit 90-Byte-Feature-Reports (+ Report-ID). Abgefragt werden nur die Lese-Befehle
+/// Akkustand kabelloser Geräte mit eigenem Funk-Empfänger (oder per Kabel) direkt am Gerät – ohne Hersteller-Software.
+/// Die unterstützten Geräte (VID 1532) haben eine Steuerschnittstelle mit 90-Byte-Feature-Reports (+ Report-ID). Abgefragt werden nur die Lese-Befehle
 /// „Akkustand“ (Klasse 0x07, Befehl 0x80) und „Lädt“ (0x07/0x84). Die Transaktions-ID unterscheidet sich je
 /// Gerätegeneration; die passende wird ausprobiert und gemerkt. Geöffnet wird ohne Lese-/Schreibrecht – so erlaubt
 /// Windows Feature-Reports auch an Maus- und Tastatur-Schnittstellen, die das System selbst belegt.
 /// Headsets sprechen ein anderes Protokoll (siehe <see cref="ReadHeadset"/>).
 /// </summary>
-internal static class RazerHid
+internal static class ReceiverHid
 {
     private const int ReportLength = 91; // Report-ID + 90 Byte
     private const byte StatusSuccess = 0x02;
@@ -37,8 +37,22 @@ internal static class RazerHid
         var found = new Dictionary<string, BatteryDevice>(StringComparer.OrdinalIgnoreCase);
         var probed = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // Produkt-ID schon beantwortet
         var now = DateTime.Now;
+        var paths = HidPaths().Where(p => p.Contains("vid_1532", StringComparison.OrdinalIgnoreCase)).ToList();
 
-        foreach (var path in HidPaths().Where(p => p.Contains("vid_1532", StringComparison.OrdinalIgnoreCase)))
+        // Geräteart je Produkt aus seinen HID-Schnittstellen: Maus vor Tastatur (Mäuse melden oft zusätzlich eine
+        // Tastatur-Schnittstelle für Makrotasten).
+        var kinds = new Dictionary<string, BatteryKind>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in paths)
+        {
+            using var probe = CreateFileW(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
+            if (probe.IsInvalid) continue;
+            var (page, usage, _) = Caps(probe);
+            var kind = page != 1 ? BatteryKind.Unknown : usage switch { 2 => BatteryKind.Mouse, 6 => BatteryKind.Keyboard, 4 or 5 => BatteryKind.Controller, _ => BatteryKind.Unknown };
+            string id = ProductId(path);
+            if (kind != BatteryKind.Unknown && (!kinds.TryGetValue(id, out var known) || known != BatteryKind.Mouse)) kinds[id] = kind;
+        }
+
+        foreach (var path in paths)
         {
             string product = ProductId(path);
             if (probed.Contains(product)) continue;
@@ -46,14 +60,14 @@ internal static class RazerHid
 
             using var handle = CreateFileW(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
             if (handle.IsInvalid) continue;
-            var (usagePage, featureLength) = Caps(handle);
+            var (usagePage, _, featureLength) = Caps(handle);
 
             if (HeadsetProducts.TryGetValue(product, out var headsetName) && usagePage == HeadsetUsagePage && featureLength == HeadsetReportLength)
             {
                 if (ReadHeadset(handle) is { } headset)
                 {
                     probed.Add(product);
-                    found.TryAdd(headsetName, new BatteryDevice("razer:" + headsetName, headsetName, BatterySource.Razer, headset.Percent, headset.Charging));
+                    found.TryAdd(headsetName, new BatteryDevice("rx:" + headsetName, headsetName, BatterySource.Receiver, headset.Percent, headset.Charging, BatteryKind.Headset));
                 }
                 else
                 {
@@ -74,9 +88,9 @@ internal static class RazerHid
             }
             bool? charging = Query(handle, path, CommandCharging).Value is { } c ? c == 1 : null;
             probed.Add(product);
-            string name = ProductName(handle) ?? $"Razer-Gerät {product.ToUpperInvariant()}";
+            string name = ProductName(handle) ?? "Kabelloses Gerät";
             int percent = (int)Math.Round(value * 100 / 255.0);
-            found.TryAdd(name, new BatteryDevice("razer:" + name, name, BatterySource.Razer, percent, charging));
+            found.TryAdd(name, new BatteryDevice("rx:" + name, name, BatterySource.Receiver, percent, charging, kinds.GetValueOrDefault(product)));
         }
         return found.Values.ToList();
     }
@@ -124,14 +138,14 @@ internal static class RazerHid
     }
 
     // ---- Headsets (eigenes Protokoll) -----------------------------------------------------
-    // BlackShark V2 Pro (Empfänger 1532:0528): 64-Byte-Feature-Report mit Report-ID 0xFF an der Herstellerschnittstelle
-    // (Usage-Page 0xFF00). Die Anfrage entspricht der von Synapse. Antwort: Kopf ff 0f 05 fe 12 04 1f 08 05, dann in
+    // Headset-Empfänger 1532:0528: 64-Byte-Feature-Report mit Report-ID 0xFF an der Herstellerschnittstelle
+    // (Usage-Page 0xFF00). Die Anfrage entspricht der der Hersteller-Software. Antwort: Kopf ff 0f 05 fe 12 04 1f 08 05, dann in
     // Byte 11 der Zustand (Bit 0x08 = lädt), 12–13 die Spannung in mV, 14 der Ladestand in Prozent. Ohne neue Antwort
     // vom Headset (aus, außer Reichweite) wiederholt der Empfänger den alten Stand unter dem Kopf ff 01 00 … – verworfen.
     private const int HeadsetReportLength = 64;
     private const ushort HeadsetUsagePage = 0xFF00;
-    // Die Herstellerschnittstelle meldet als Produktnamen nur „Hid Interface“ – deshalb der Name je Produkt-ID.
-    private static readonly Dictionary<string, string> HeadsetProducts = new(StringComparer.OrdinalIgnoreCase) { ["pid_0528"] = "Razer BlackShark V2 Pro" };
+    // Die Herstellerschnittstelle meldet als Produktnamen nur „Hid Interface“ – deshalb ein allgemeiner Name je Produkt-ID.
+    private static readonly Dictionary<string, string> HeadsetProducts = new(StringComparer.OrdinalIgnoreCase) { ["pid_0528"] = "Headset" };
     private static readonly byte[] HeadsetRequest = [0xFF, 0x0A, 0x00, 0xFD, 0x04, 0x12, 0xF1, 0x02, 0x05];
     private static readonly byte[] HeadsetReply = [0xFF, 0x0F, 0x05, 0xFE, 0x12, 0x04, 0x1F, 0x08, 0x05];
 
@@ -140,7 +154,7 @@ internal static class RazerHid
         var request = new byte[HeadsetReportLength];
         HeadsetRequest.CopyTo(request, 0);
         if (!HidD_SetFeature(handle, request, HeadsetReportLength)) return null;
-        Thread.Sleep(100); // wie Synapse; nur die erste Antwort ist frisch
+        Thread.Sleep(100); // wie die Hersteller-Software; nur die erste Antwort ist frisch
         var response = new byte[HeadsetReportLength];
         response[0] = 0xFF;
         if (!HidD_GetFeature(handle, response, HeadsetReportLength) || !response.AsSpan(0, HeadsetReply.Length).SequenceEqual(HeadsetReply))
@@ -151,12 +165,12 @@ internal static class RazerHid
         return (level, (response[11] & 0x08) != 0);
     }
 
-    private static (ushort UsagePage, int FeatureLength) Caps(SafeFileHandle handle)
+    private static (ushort UsagePage, ushort Usage, int FeatureLength) Caps(SafeFileHandle handle)
     {
-        if (!HidD_GetPreparsedData(handle, out var data)) return ((ushort)0, 0);
+        if (!HidD_GetPreparsedData(handle, out var data)) return (0, 0, 0);
         try
         {
-            return HidP_GetCaps(data, out var caps) == HIDP_STATUS_SUCCESS ? (caps.UsagePage, (int)caps.FeatureReportByteLength) : ((ushort)0, 0);
+            return HidP_GetCaps(data, out var caps) == HIDP_STATUS_SUCCESS ? (caps.UsagePage, caps.Usage, (int)caps.FeatureReportByteLength) : ((ushort)0, (ushort)0, 0);
         }
         finally
         {

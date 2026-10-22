@@ -19,7 +19,7 @@
             </DockPanel>
 
             <TextBlock Visibility="{Binding EmptyVisibility}" Style="{StaticResource FlyoutSubtitle}" Margin="0,12,0,0"
-                       Text="Kein Gerät mit Akkustand gefunden. Bluetooth-Geräte müssen verbunden sein (Windows zeigt ihren Akku dann auch unter Einstellungen → Bluetooth). Razer: kabellose Mäuse und Tastaturen über Dongle oder Kabel sowie das BlackShark V2 Pro (Headset muss eingeschaltet sein)." />
+                       Text="Kein Gerät mit Akkustand gefunden. Kabellose Geräte müssen eingeschaltet und verbunden sein." />
 
             <ItemsControl ItemsSource="{Binding Rows}" Margin="0,8,0,0" Focusable="False">
                 <ItemsControl.ItemTemplate>
@@ -32,7 +32,17 @@
                                                Foreground="{Binding Brush}" Typography.NumeralAlignment="Tabular" Margin="10,0,0,0" />
                                     <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="{Binding Detail}" FontSize="12" Opacity="0.6" />
+                                        <TextBlock Text="{Binding Detail}" FontSize="12" Opacity="0.6">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Detail}" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                     </StackPanel>
                                 </DockPanel>
                                 <ProgressBar Minimum="0" Maximum="1" Value="{Binding Fraction, Mode=OneWay}" Foreground="{Binding Brush}"
