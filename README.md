@@ -26,7 +26,7 @@ Das bisher größte Update: achtzehn neue Widgets, Profile, Zeichnen auf dem Bil
 
 <p align="center"><img src="assets/screenshots/release-1.4-widgets.png" alt="Neue Widgets in Veyra 1.4: FPS, Wetter, Weltuhr, Zwischenablage, Schnellstart, Geräte-Akku, Helligkeit, Countdown" width="100%"></p>
 
-- **Achtzehn neue Widgets:** Medien, FPS, Wetter, Weltuhr, Zwischenablage, Schnellstart, Geräte-Akku (Bluetooth und Razer), Helligkeit & Nachtmodus, öffentliche IP, Notiz, Bild, Countdown, Videospeicher, GPU-Takt, GPU-Lüfter, Akku, Laufwerk und Trennlinie.
+- **Achtzehn neue Widgets:** Medien, FPS, Wetter, Weltuhr, Zwischenablage, Schnellstart, Geräte-Akku, Helligkeit & Nachtmodus, öffentliche IP, Notiz, Bild, Countdown, Videospeicher, GPU-Takt, GPU-Lüfter, Akku, Laufwerk und Trennlinie.
 - **Profile:** eigene Ansichten mit eigenen Flächen und Widgets, z. B. „Arbeit“ und „Gaming“. Umschalten per Tastenkürzel über eine Auswahl, die sich wie ein Spiel-Overlay über alles legt, auch im randlosen Vollbild.
 - **Auf den Bildschirm zeichnen:** Stift, Textmarker, Pfeil, Formen und Radierer, direkt über allen Fenstern und Spielen. Ideal zum Zeigen, Erklären und Streamen.
 - **Mikrofon stumm per Tastenkürzel:** auch mitten im Spiel, mit roter Markierung, Anzeige auf dem Bildschirm und Signalton.
@@ -67,7 +67,7 @@ Das bisher größte Update: achtzehn neue Widgets, Profile, Zeichnen auf dem Bil
 - **Systemauslastung:** CPU, GPU, Arbeitsspeicher, GPU-Temperatur, Videospeicher, GPU-Takt und GPU-Lüfter – als Zahl, Balken oder Verlauf der letzten Minute, mit Warnfarben bei hoher Last. Alles direkt aus Windows gelesen, ohne Zusatzsoftware und ohne Adminrechte.
 - **FPS:** Bilder pro Sekunde des Spiels im Vordergrund, auf Wunsch mit Frametime und 1 % Low, dazu ein Verlauf der letzten Minute. Gemessen direkt über Windows (DirectX 9 bis 12), ohne Overlay und ohne Adminrechte: Dafür muss dein Konto einmalig in die Windows-Gruppe „Leistungsprotokollbenutzer“ – per Häkchen im Installer oder per Klick im Widget.
 - **Akku und Laufwerke:** Ladestand mit Restlaufzeit; belegter oder freier Speicher eines Laufwerks.
-- **Geräte-Akku:** Ladestand von Bluetooth-Geräten (Maus, Tastatur, Kopfhörer, Controller) und kabellosen Razer-Mäusen, -Tastaturen und dem BlackShark V2 Pro über Dongle oder Kabel – ganz ohne Synapse. Mit Warnfarben und Benachrichtigung bei wenig Akku.
+- **Geräte-Akku:** Ladestand von Maus, Tastatur, Headset und Controller – mit Warnfarben und Benachrichtigung bei wenig Akku.
 - **Helligkeit & Nachtmodus:** Helligkeit aller Monitore per Mausrad oder Regler (DDC/CI), dazu ein Nachtmodus mit warmem Licht – von Hand, per Tastenkürzel oder nach Zeitplan.
 - **Netzwerk:** aktuelle Verbindung (LAN/WLAN) mit Netzwerkname und Signalstärke. Ein Klick zeigt IP-Adressen, Gateway, DNS, Adapter und Geschwindigkeit. Ab Windows 11 24H2 gibt Windows WLAN-Name und Signalstärke nur heraus, wenn Desktop-Apps auf den Standort zugreifen dürfen.
 - **Upload / Download** in Echtzeit, getrennt oder zusammen, optional mit Verlaufsgrafik.
