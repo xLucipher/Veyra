@@ -22,6 +22,13 @@
             </Button.Template>
         </Button>
 
+        <!-- Pipette: Farbe vom Bildschirm aufnehmen -->
+        <Button Width="32" Height="32" Margin="6,0,0,0" Padding="0" Cursor="Hand" Click="OnEyedropperClick"
+                ToolTip="Farbe vom Bildschirm aufnehmen (Pipette)">
+            <TextBlock Text="&#xEF3C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Button>
+
         <TextBox x:Name="HexBox" Width="110" Margin="8,0,0,0" VerticalContentAlignment="Center"
                  ToolTip="Eigene Farbe als #RRGGBB oder #AARRGGBB"
                  Text="{Binding Value, RelativeSource={RelativeSource AncestorType=ui:ColorField}, UpdateSourceTrigger=PropertyChanged}" />
@@ -49,6 +56,10 @@
                         <Border x:Name="PopupPreview" DockPanel.Dock="Left" Width="44" Height="28" CornerRadius="5" BorderBrush="#60FFFFFF" BorderThickness="1" />
                         <TextBlock x:Name="PopupHex" DockPanel.Dock="Left" VerticalAlignment="Center" Margin="10,0,0,0" FontFamily="Consolas" />
                         <Button DockPanel.Dock="Right" Content="Fertig" Click="OnDoneClick" />
+                        <Button DockPanel.Dock="Right" Margin="0,0,8,0" Padding="8,0" Cursor="Hand" Click="OnEyedropperClick"
+                                ToolTip="Farbe vom Bildschirm aufnehmen (Pipette)">
+                            <TextBlock Text="&#xEF3C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center" />
+                        </Button>
                     </DockPanel>
                 </StackPanel>
             </Border>

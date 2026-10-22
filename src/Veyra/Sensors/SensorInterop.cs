@@ -5,7 +5,7 @@ namespace Veyra.Sensors;
 /// <summary>
 /// Windows-Schnittstellen für Systemwerte – alle ohne Zusatzsoftware und ohne Adminrechte:
 /// GetSystemTimes (CPU), GlobalMemoryStatusEx (RAM), Leistungsindikatoren/PDH (GPU-Auslastung, wie der Task-Manager),
-/// DXGI (Grafikkarten: Name, LUID, Videospeicher) und D3DKMT (GPU-Temperatur, wie der Task-Manager).
+/// DXGI (Grafikkarten: Name, LUID, Videospeicher) und D3DKMT (GPU-Temperatur, -Takt und -Lüfter, wie der Task-Manager).
 /// </summary>
 internal static class SensorInterop
 {
@@ -32,6 +32,36 @@ internal static class SensorInterop
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX buffer);
 
+    // ---- Akku / Laufwerke -----------------------------------------------------------------
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SYSTEM_POWER_STATUS
+    {
+        public byte ACLineStatus;        // 0 = Akku, 1 = Netz, 255 = unbekannt
+        public byte BatteryFlag;         // 128 = kein Akku, 8 = lädt, 255 = unbekannt
+        public byte BatteryLifePercent;  // 0–100, 255 = unbekannt
+        public byte SystemStatusFlag;    // 1 = Energiesparen aktiv
+        public int BatteryLifeTime;      // Sekunden, -1 = unbekannt
+        public int BatteryFullLifeTime;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS status);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetDiskFreeSpaceEx(string directory, out ulong freeForCaller, out ulong total, out ulong totalFree);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    public static extern uint GetDriveType(string root);
+
+    public const uint DRIVE_REMOVABLE = 2, DRIVE_FIXED = 3;
+
+    [DllImport("kernel32.dll")]
+    public static extern uint SetErrorMode(uint mode);
+
+    public const uint SEM_FAILCRITICALERRORS = 0x0001;
+
     // ---- PDH (Leistungsindikatoren) -------------------------------------------------------
     public const uint PDH_FMT_DOUBLE = 0x00000200;
     public const uint PDH_FMT_NOCAP100 = 0x00008000;
@@ -56,6 +86,9 @@ internal static class SensorInterop
 
     [DllImport("pdh.dll", CharSet = CharSet.Unicode)]
     public static extern int PdhGetFormattedCounterArrayW(IntPtr counter, uint format, ref uint bufferSize, out uint itemCount, IntPtr itemBuffer);
+
+    [DllImport("pdh.dll")]
+    public static extern int PdhRemoveCounter(IntPtr counter);
 
     [DllImport("pdh.dll")]
     public static extern int PdhCloseQuery(IntPtr query);
@@ -118,8 +151,10 @@ internal static class SensorInterop
         int GetDesc1(out DXGI_ADAPTER_DESC1 desc);
     }
 
-    // ---- D3DKMT (GPU-Temperatur) ----------------------------------------------------------
+    // ---- D3DKMT (GPU-Temperatur, -Takt, -Lüfter) ------------------------------------------
+    public const int KMTQAITYPE_NODEPERFDATA = 61;
     public const int KMTQAITYPE_ADAPTERPERFDATA = 62;
+    public const int KMTQAITYPE_ADAPTERPERFDATA_CAPS = 63;
 
     [StructLayout(LayoutKind.Sequential)]
     public struct D3DKMT_OPENADAPTERFROMLUID
@@ -157,6 +192,33 @@ internal static class SensorInterop
         public uint Power;        // Promille
         public uint Temperature;  // Zehntel °C
         public byte PowerStateOverride;
+    }
+
+    /// <summary>Feste Werte der Karte, z. B. die höchste Lüfterdrehzahl (0 = unbekannt).</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct D3DKMT_ADAPTER_PERFDATACAPS
+    {
+        public uint PhysicalAdapterIndex;
+        public ulong MaxMemoryBandwidth;
+        public ulong MaxPCIEBandwidth;
+        public uint MaxFanRPM;
+        public uint TemperatureMax;
+        public uint TemperatureWarning;
+    }
+
+    /// <summary>Takt einer Engine (Node 0 = 3D) in Hz, wie im Task-Manager.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct D3DKMT_NODE_PERFDATA
+    {
+        public uint NodeOrdinal;
+        public uint PhysicalAdapterIndex;
+        public ulong Frequency;
+        public ulong MaxFrequency;
+        public ulong MaxFrequencyOC;
+        public uint Voltage;
+        public uint VoltageMax;
+        public uint VoltageMaxOC;
+        public ulong MaxTransitionLatency;
     }
 
     [DllImport("gdi32.dll")]

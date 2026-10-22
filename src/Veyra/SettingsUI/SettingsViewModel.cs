@@ -35,9 +35,9 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     private string? _forceCandidate;
     private string _statusText = "";
     private readonly AudioDeviceService _audioService = new();
-    private WidgetInfo? _newWidget;
 
-    public SettingsViewModel(SettingsService service, Action exitApplication, Func<Task<string>> checkForUpdates)
+    /// <param name="showProfileOverlay">Öffnet die Profilauswahl (Overlay) zum Ausprobieren.</param>
+    public SettingsViewModel(SettingsService service, Action exitApplication, Func<Task<string>> checkForUpdates, Action showProfileOverlay)
     {
         _service = service;
         _settings = service.Current.Clone();
@@ -68,6 +68,11 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         });
         OpenSettingsFileCommand = new RelayCommand(() => OpenWithShell(_service.FilePath));
         OpenLogFolderCommand = new RelayCommand(() => OpenWithShell(Log.LogDirectory ?? SettingsService.DirectoryPath));
+        OpenBackupFolderCommand = new RelayCommand(() =>
+        {
+            Directory.CreateDirectory(SettingsService.BackupDirectoryPath); // vor der ersten Sicherung noch nicht vorhanden
+            OpenWithShell(SettingsService.BackupDirectoryPath);
+        });
         RefreshMonitorsCommand = new RelayCommand(RefreshMonitors);
         RefreshProcessesCommand = new RelayCommand(() => RunningProcesses = SettingsOptions.GetWindowedProcessNames());
         AddExcludedCommand = new RelayCommand(() => AddProcess(_settings.Behavior.FullscreenExcludedProcesses, ExcludeCandidate, nameof(ExcludedProcessesText)),
@@ -82,11 +87,14 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         }, () => UpdateStatus != "Suche nach Updates …");
         OpenReleasesCommand = new RelayCommand(() => Updates.UpdateService.OpenReleasePage());
         UpdateStatus = DescribeLastCheck();
-        AddWidgetCommand = new RelayCommand(AddWidget, () => NewWidget is not null);
+        AddWidgetCommand = new RelayCommand<WidgetInfo>(AddWidget);
         ResetFreePositionsCommand = new RelayCommand(ResetFreePositions);
         AddBarCommand = new RelayCommand(AddBar);
         RemoveBarCommand = new RelayCommand(RemoveBar, () => CanRemoveBar);
         RefreshAudioDevicesCommand = new RelayCommand(RebuildAudioRows);
+        NewProfileCommand = new RelayCommand(() => RunProfileOperation(() => ProfileOperations.Create(_service), "Neues Profil angelegt – als Kopie der aktuellen Ansicht."));
+        ShowProfileOverlayCommand = new RelayCommand(showProfileOverlay);
+        _service.Changed += OnServiceChanged;
         _audioService.Changed += (_, _) => RebuildAudioRows();
 
         _runningProcesses = SettingsOptions.GetWindowedProcessNames();
@@ -95,6 +103,151 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         RefreshMonitors();
         RebuildWidgetRows();
         RebuildAudioRows();
+        RebuildProfileRows();
+    }
+
+    // ---- Navigation -------------------------------------------------------------------------
+    // Seitenleiste: oben das Profil, darunter die Leisten des Profils (je Leiste Tabs), darunter „Allgemein“.
+    // Es ist immer genau eins gewählt: eine Leiste oder ein allgemeiner Bereich.
+
+    public const int ProfilesPageIndex = 0;
+    public const int FullscreenPageIndex = 1;
+    public const int AudioPageIndex = 2;
+    public const int SystemPageIndex = 3;
+
+    public const int AppearanceTabIndex = 0;
+    public const int WidgetsTabIndex = 1;
+    public const int PositionTabIndex = 2;
+
+    private int _generalIndex = -1;
+    private int _barTabIndex;
+
+    /// <summary>Gewählte Leiste in der Seitenleiste; -1, solange ein allgemeiner Bereich offen ist.</summary>
+    public int NavBarIndex
+    {
+        get => _generalIndex < 0 ? _barIndex : -1;
+        set
+        {
+            if (value < 0) return; // Abwahl durch die andere Liste
+            _generalIndex = -1;
+            SelectedBarIndex = value;
+            OnNavigationChanged();
+        }
+    }
+
+    /// <summary>Gewählter allgemeiner Bereich (Profile, Vollbild &amp; Spiele, Audiogeräte, System); -1 = eine Leiste.</summary>
+    public int NavGeneralIndex
+    {
+        get => _generalIndex;
+        set
+        {
+            if (value < 0) return;
+            _generalIndex = value;
+            OnNavigationChanged();
+        }
+    }
+
+    /// <summary>Tab der Leistenseite: Aussehen, Widgets, Position &amp; Verhalten.</summary>
+    public int BarTabIndex { get => _barTabIndex; set => SetProperty(ref _barTabIndex, value); }
+
+    public System.Windows.Visibility BarPageVisibility =>
+        _generalIndex < 0 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+    public void ShowGeneralPage(int index) => NavGeneralIndex = index;
+
+    private void OnNavigationChanged()
+    {
+        OnPropertyChanged(nameof(NavBarIndex));
+        OnPropertyChanged(nameof(NavGeneralIndex));
+        OnPropertyChanged(nameof(BarPageVisibility));
+    }
+
+    // ---- Profile ----------------------------------------------------------------------------
+
+    /// <summary>Profilauswahl oben in der Seitenleiste: Wechsel wirkt sofort (wie auf der Seite „Profile“).</summary>
+    public ProfileRowViewModel? SelectedProfileRow
+    {
+        get => ProfileRows.FirstOrDefault(r => r.IsActive);
+        set
+        {
+            // null beim Austausch der Liste, das aktive Profil oder ein Wechsel, der schon läuft: nichts tun.
+            if (value is null || value.IsActive || _runningProfileOperation) return;
+            string id = value.Id;
+            // Erst nach der Bindungsaktualisierung: Der Wechsel baut die Liste dieses Auswahlfelds neu auf.
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
+                RunProfileOperation(() => ProfileOperations.Switch(_service, id), "Profil gewechselt."));
+        }
+    }
+
+    public ICommand NewProfileCommand { get; }
+    public ICommand ShowProfileOverlayCommand { get; }
+
+    public System.Collections.ObjectModel.ObservableCollection<ProfileRowViewModel> ProfileRows { get; } = [];
+
+    /// <summary>Tastenkürzel der Profilauswahl (wird wie alle Einstellungen mit „Übernehmen“ gespeichert).</summary>
+    public string? ProfileHotkey
+    {
+        get => _settings.ProfileHotkey;
+        set
+        {
+            if (_settings.ProfileHotkey == value) return;
+            _settings.ProfileHotkey = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string ActiveProfileName => _settings.ActiveProfile.Name;
+
+    private void RebuildProfileRows()
+    {
+        ProfileRows.Clear();
+        for (int i = 0; i < _settings.Profiles.Count; i++)
+        {
+            var profile = _settings.Profiles[i];
+            ProfileRows.Add(new ProfileRowViewModel(profile.Id, profile.Name, ProfileOperations.Summary(_settings, profile),
+                profile.Id == _settings.ActiveProfileId, i, _settings.Profiles.Count,
+                activate: id => RunProfileOperation(() => ProfileOperations.Switch(_service, id), "Profil gewechselt."),
+                rename: (id, name) => RunProfileOperation(() => ProfileOperations.Rename(_service, id, name), "Profil umbenannt."),
+                duplicate: id => RunProfileOperation(() => ProfileOperations.Create(_service, copyFromId: id), "Profil dupliziert."),
+                move: (id, delta) => RunProfileOperation(() => ProfileOperations.Move(_service, id, delta), "Reihenfolge geändert."),
+                delete: id => RunProfileOperation(() => ProfileOperations.Delete(_service, id), "Profil gelöscht.")));
+        }
+        OnPropertyChanged(nameof(ActiveProfileName));
+        OnPropertyChanged(nameof(SelectedProfileRow));
+    }
+
+    private bool _runningProfileOperation;
+
+    /// <summary>
+    /// Profilaktionen wirken sofort. Offene Änderungen gehören zum aktuellen Profil und werden vorher übernommen,
+    /// danach zeigt das Fenster den neuen Stand.
+    /// </summary>
+    private void RunProfileOperation(Action operation, string status)
+    {
+        _runningProfileOperation = true;
+        try
+        {
+            SyncRowsToSettings();
+            _service.Save(_settings.Clone());
+            operation();
+        }
+        finally
+        {
+            _runningProfileOperation = false;
+        }
+        ReplaceSettings(_service.Current.Clone());
+        StatusText = status;
+    }
+
+    /// <summary>
+    /// Profil von außen gewechselt (Overlay, Kontextmenü): Diese Ansicht zeigt sonst die Leisten des alten Profils,
+    /// und „Übernehmen“ würde sie ins neue Profil schreiben. Deshalb neu laden – ungespeicherte Änderungen verfallen.
+    /// </summary>
+    private void OnServiceChanged(object? sender, AppSettings settings)
+    {
+        if (_runningProfileOperation || settings.ActiveProfileId == _settings.ActiveProfileId) return;
+        ReplaceSettings(settings.Clone());
+        StatusText = $"Profil „{_settings.ActiveProfile.Name}“ aktiviert – Ansicht neu geladen.";
     }
 
     // ---- Widgets ----------------------------------------------------------------------------
@@ -106,7 +259,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public System.Collections.ObjectModel.ObservableCollection<AudioDeviceRowViewModel> OutputDeviceRows { get; } = [];
     public System.Collections.ObjectModel.ObservableCollection<AudioDeviceRowViewModel> InputDeviceRows { get; } = [];
 
-    public IReadOnlyList<WidgetInfo> WidgetCatalogItems => WidgetCatalog.All;
+
     public IReadOnlyList<EnumOption> SlotOptions => WidgetCatalog.Slots;
     public IReadOnlyList<double> MarginPresets => WidgetCatalog.MarginPresets;
     public IReadOnlyList<double> SpacingPresets => WidgetCatalog.SpacingPresets;
@@ -118,6 +271,44 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public IReadOnlyList<EnumOption> TrafficDirectionOptions => WidgetCatalog.TrafficDirections;
     public IReadOnlyList<IntOption> TrafficIntervalOptions => WidgetCatalog.TrafficIntervals;
     public IReadOnlyList<int> WheelStepOptions => WidgetCatalog.WheelSteps;
+    public IReadOnlyList<EnumOption> CountdownStyleOptions => WidgetCatalog.CountdownStyles;
+    public IReadOnlyList<EnumOption> CountdownRepeatOptions => WidgetCatalog.CountdownRepeats;
+    public IReadOnlyList<EnumOption> SeparatorStyleOptions => WidgetCatalog.SeparatorStyles;
+    public IReadOnlyList<EnumOption> TextAlignmentOptions => WidgetCatalog.TextAlignments;
+    public IReadOnlyList<double> NoteFontSizePresets => WidgetCatalog.NoteFontSizes;
+    public IReadOnlyList<double> NoteWidthPresets => WidgetCatalog.NoteWidthPresets;
+    public IReadOnlyList<double> ImageHeightPresets => WidgetCatalog.ImageHeightPresets;
+    public IReadOnlyList<double> SeparatorLengthPresets => WidgetCatalog.SeparatorLengthPresets;
+    public IReadOnlyList<int> ClipboardSizeOptions => WidgetCatalog.ClipboardSizes;
+    public IReadOnlyList<EnumOption> IpVersionOptions => WidgetCatalog.IpVersions;
+    public IReadOnlyList<IntOption> PublicIpIntervalOptions => WidgetCatalog.PublicIpIntervals;
+    public IReadOnlyList<EnumOption> TemperatureUnitOptions => WidgetCatalog.TemperatureUnits;
+    public IReadOnlyList<EnumOption> WindUnitOptions => WidgetCatalog.WindUnits;
+    public IReadOnlyList<IntOption> WeatherIntervalOptions => WidgetCatalog.WeatherIntervals;
+    public IReadOnlyList<IntOption> NightTemperatureOptions => WidgetCatalog.NightTemperatures;
+    public IReadOnlyList<Option> TimeZoneOptions => WidgetCatalog.TimeZones;
+
+    private IReadOnlyList<Option>? _driveOptions;
+
+    /// <summary>Lokale Laufwerke für Laufwerk-Widgets.</summary>
+    public IReadOnlyList<Option> DriveOptions => _driveOptions ??= BuildDriveOptions();
+
+    private IReadOnlyList<Option> BuildDriveOptions()
+    {
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        var options = Sensors.SystemMonitor.EnumerateDrives()
+            .Select(d => new Option(d.Root, string.Format(culture, "{0} {1}– {2:0} GB",
+                d.Root.TrimEnd('\\'), d.Label.Length > 0 ? $"„{d.Label}“ " : "", d.Total / 1073741824.0)))
+            .ToList();
+        // Gespeichertes, gerade nicht vorhandenes Laufwerk (z. B. USB-Stick) bleibt auswählbar.
+        foreach (var missing in _settings.Bars.SelectMany(b => b.Widgets).Where(w => w.Type == WidgetType.Drive)
+                     .Select(w => w.Metric?.Drive).OfType<string>()
+                     .Where(d => options.All(o => !string.Equals(o.Value, d, StringComparison.OrdinalIgnoreCase)))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+            options.Add(new Option(missing, $"{missing.TrimEnd('\\')} (nicht gefunden)"));
+        if (options.Count == 0) options.Add(new Option("C:\\", "C:"));
+        return options;
+    }
 
     private IReadOnlyList<Option>? _adapterOptions;
 
@@ -163,8 +354,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<EnumOption> BarModeOptions { get; } =
     [
-        new(BarMode.FullWidth, "Fixiert – oben, volle Breite"),
-        new(BarMode.Floating, "Dynamisch – frei beweglich"),
+        new(BarMode.FullWidth, "Fixiert – als Leiste oben, volle Breite"),
+        new(BarMode.Floating, "Dynamisch – frei beweglich, beliebige Größe"),
     ];
 
     public IReadOnlyList<EnumOption> LayerOptions { get; } =
@@ -255,17 +446,17 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public bool CanRemoveBar => _settings.Bars.Count > 1;
 
     public string BarHintText =>
-        $"Jede Leiste ist ein eigenes Fenster mit eigener Darstellung, Ebene, Monitor und eigenen Widgets. Vorhanden: {(_settings.Bars.Count == 1 ? "1 Leiste" : $"{_settings.Bars.Count} Leisten")}.";
+        $"Alles auf dieser Seite gilt nur für diese Fläche im Profil „{_settings.ActiveProfile.Name}“ – jede Fläche ist ein eigenes Fenster.";
 
     /// <summary>Rechtsklick auf eine Leiste → Einstellungen öffnen sich mit dieser Leiste.</summary>
     public void SelectBarById(string id)
     {
         int index = _settings.Bars.FindIndex(b => b.Id == id);
-        if (index >= 0) SelectedBarIndex = index;
+        if (index >= 0) NavBarIndex = index;
     }
 
     private static string DisplayName(BarSettings bar, int index) =>
-        string.IsNullOrWhiteSpace(bar.Name) ? $"Leiste {index + 1}" : bar.Name.Trim();
+        string.IsNullOrWhiteSpace(bar.Name) ? $"Fläche {index + 1}" : bar.Name.Trim();
 
     private void RebuildBarOptions()
     {
@@ -283,7 +474,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         SyncWidgetRows();
         var bar = new BarSettings
         {
-            Name = $"Leiste {_settings.Bars.Count + 1}",
+            Name = $"Fläche {_settings.Bars.Count + 1}",
             MonitorSelection = Bar.MonitorSelection,
             Appearance = new AppearanceSettings
             {
@@ -302,6 +493,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         bar.Normalize(_settings.Bars.Count);
         _settings.Bars.Add(bar);
         _barIndex = _settings.Bars.Count - 1;
+        _generalIndex = -1; // neue Fläche gleich anzeigen
         OnBarSwitched();
         StatusText = $"„{bar.Name}“ hinzugefügt – mit „Übernehmen“ anzeigen.";
     }
@@ -333,18 +525,58 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         new(AudioLabelMode.NameOnly, "Nur Name"),
     ];
 
-    public WidgetInfo? NewWidget { get => _newWidget; set => SetProperty(ref _newWidget, value); }
+    /// <summary>Suchtext der Widget-Auswahl (Name oder Beschreibung).</summary>
+    public string WidgetSearch
+    {
+        get => _widgetSearch;
+        set
+        {
+            if (SetProperty(ref _widgetSearch, value ?? "")) OnPropertyChanged(nameof(WidgetCatalogGroups));
+        }
+    }
 
-    public void Dispose() => _audioService.Dispose();
+    private string _widgetSearch = "";
+
+    /// <summary>Popup „Widget hinzufügen“ offen.</summary>
+    public bool IsAddWidgetOpen
+    {
+        get => _isAddWidgetOpen;
+        set
+        {
+            if (SetProperty(ref _isAddWidgetOpen, value) && !value) WidgetSearch = "";
+        }
+    }
+
+    private bool _isAddWidgetOpen;
+
+    /// <summary>Ein Widget wurde hinzugefügt – die Ansicht scrollt zu seiner (geöffneten) Zeile.</summary>
+    public event EventHandler<WidgetRowViewModel>? WidgetAdded;
+
+    /// <summary>Enter im Suchfeld: ersten Treffer hinzufügen.</summary>
+    public void AddFirstSearchResult()
+    {
+        if (WidgetCatalogGroups.FirstOrDefault()?.Items.FirstOrDefault() is { } first) AddWidget(first);
+    }
+
+    /// <summary>Widget-Auswahl nach Kategorien, gefiltert nach <see cref="WidgetSearch"/>.</summary>
+    public IReadOnlyList<WidgetCatalogGroup> WidgetCatalogGroups => WidgetCatalog.Groups(WidgetSearch);
+
+    public void Dispose()
+    {
+        _service.Changed -= OnServiceChanged;
+        _audioService.Dispose();
+    }
 
     private void RebuildWidgetRows()
     {
+        string? selectedId = _selectedWidget?.Id;
         WidgetRows.Clear();
         // Feste Widgets zuerst, freie danach von links nach rechts – so wie sie auf der Leiste stehen.
         foreach (var entry in Bar.Widgets.OrderBy(w => w.IsFixed ? 0 : 1).ThenBy(w => w.IsFixed ? (double)w.Slot : w.Position))
             WidgetRows.Add(CreateRow(entry));
         RebuildClockRows();
         UpdateHotkeyWarnings();
+        RestoreWidgetSelection(selectedId);
     }
 
     private WidgetRowViewModel CreateRow(WidgetEntry entry)
@@ -358,31 +590,62 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         var created = new WidgetRowViewModel(entry, devices, _settings.Audio, Bar.Appearance.ForegroundColor,
             remove: row =>
             {
+                int index = WidgetRows.IndexOf(row);
                 WidgetRows.Remove(row);
                 RebuildClockRows();
                 UpdateHotkeyWarnings();
+                // Nachbarn auswählen, damit rechts nicht das entfernte Widget stehen bleibt.
+                SetSelectedWidget(WidgetRows.Count == 0 ? null : WidgetRows[Math.Clamp(index, 0, WidgetRows.Count - 1)]);
             },
-            editClock: row =>
-            {
-                SelectedClock = row;
-                SelectedPageIndex = ClockPageIndex;
-            },
-            hotkeyChanged: UpdateHotkeyWarnings)
-        {
-            IsExpanded = _expandedWidgets.Contains(entry.Id),
-        };
-        // Aufgeklappte Widgets merken – nach "Übernehmen" werden die Zeilen neu erzeugt.
-        created.PropertyChanged += (sender, e) =>
-        {
-            if (e.PropertyName != nameof(WidgetRowViewModel.IsExpanded) || sender is not WidgetRowViewModel row) return;
-            if (row.IsExpanded) _expandedWidgets.Add(row.Id);
-            else _expandedWidgets.Remove(row.Id);
-        };
+            hotkeyChanged: UpdateHotkeyWarnings);
+        if (entry.Type == WidgetType.DeviceBattery) _ = FillBatteryDevicesAsync(created);
         return created;
     }
 
-    /// <summary>IDs der ausgeklappten Widget-Karten (standardmäßig sind alle eingeklappt).</summary>
-    private readonly HashSet<string> _expandedWidgets = [];
+    /// <summary>Gerätewahl des Geräte-Akku-Widgets: Geräte im Hintergrund lesen (Razer-Abfragen dauern einen Moment).</summary>
+    private static async Task FillBatteryDevicesAsync(WidgetRowViewModel row)
+    {
+        var devices = await Peripherals.DeviceBatteryService.ReadAsync();
+        row.SetBatteryDevices(devices);
+    }
+
+    // ---- Widget-Auswahl (Liste links, Einstellungen des gewählten Widgets rechts) -------------
+    private WidgetRowViewModel? _selectedWidget;
+
+    public WidgetRowViewModel? SelectedWidget
+    {
+        get => _selectedWidget;
+        set
+        {
+            // WPF schreibt beim Austausch der Liste kurz null zurück – ignorieren.
+            if (value is null || value == _selectedWidget) return;
+            SetSelectedWidget(value);
+        }
+    }
+
+    /// <summary>Rechte Seite: Uhr-Einstellungen (Format, Schrift, Datum) nur bei einer Uhr.</summary>
+    public System.Windows.Visibility SelectedClockSettingsVisibility =>
+        _selectedWidget?.IsClock == true ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+    public System.Windows.Visibility WidgetDetailVisibility =>
+        _selectedWidget is null ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+
+    public System.Windows.Visibility NoWidgetsVisibility =>
+        WidgetRows.Count == 0 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+    private void SetSelectedWidget(WidgetRowViewModel? row)
+    {
+        _selectedWidget = row;
+        if (row?.IsClock == true) SelectedClock = row; // Uhr-Felder bearbeiten genau diese Uhr
+        OnPropertyChanged(nameof(SelectedWidget));
+        OnPropertyChanged(nameof(SelectedClockSettingsVisibility));
+        OnPropertyChanged(nameof(WidgetDetailVisibility));
+        OnPropertyChanged(nameof(NoWidgetsVisibility));
+    }
+
+    /// <summary>Nach dem Neuaufbau der Liste dasselbe Widget (über die ID) oder das erste wählen.</summary>
+    private void RestoreWidgetSelection(string? id) =>
+        SetSelectedWidget(WidgetRows.FirstOrDefault(r => r.Id == id) ?? WidgetRows.FirstOrDefault());
 
     /// <summary>
     /// Tastenkürzel prüfen: doppelt vergeben (auch auf anderen Leisten) oder von einem anderen Programm belegt.
@@ -425,14 +688,11 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     }
 
     // ---- Uhren (jede Uhr hat eigene Einstellungen) ------------------------------------------
-    private const int ClockPageIndex = 2;
-    private int _selectedPageIndex;
     private WidgetRowViewModel? _selectedClock;
 
     /// <summary>Platzhalter, solange die Leiste keine Uhr hat – Änderungen daran werden nirgends gespeichert.</summary>
     private readonly ClockSettings _noClock = new();
 
-    public int SelectedPageIndex { get => _selectedPageIndex; set => SetProperty(ref _selectedPageIndex, value); }
 
     /// <summary>Uhren der ausgewählten Leiste.</summary>
     public System.Collections.ObjectModel.ObservableCollection<WidgetRowViewModel> ClockRows { get; } = [];
@@ -449,17 +709,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Die Uhr, deren Einstellungen auf der Seite "Uhr &amp; Kalender" bearbeitet werden.</summary>
+    /// <summary>Die Uhr, deren Einstellungen gerade bearbeitet werden (das in der Widget-Liste gewählte Widget).</summary>
     public ClockSettings ClockEdit => _selectedClock?.Clock ?? _noClock;
-
-    public System.Windows.Visibility ClockEditorVisibility =>
-        ClockRows.Count > 0 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
-
-    public System.Windows.Visibility NoClockVisibility =>
-        ClockRows.Count > 0 ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
-
-    public System.Windows.Visibility ClockSelectorVisibility =>
-        ClockRows.Count > 1 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
 
     /// <summary>Uhrenliste neu aufbauen (Widgets hinzugefügt/entfernt, andere Leiste) – Auswahl möglichst beibehalten.</summary>
     private void RebuildClockRows()
@@ -475,9 +726,6 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         // Nach "Übernehmen" sind die Zeilen neu erzeugt – deshalb über die Widget-ID wiederfinden.
         _selectedClock = clocks.FirstOrDefault(c => c.Id == previous?.Id) ?? clocks.FirstOrDefault();
         OnClockSwitched();
-        OnPropertyChanged(nameof(ClockEditorVisibility));
-        OnPropertyChanged(nameof(NoClockVisibility));
-        OnPropertyChanged(nameof(ClockSelectorVisibility));
     }
 
     private void OnClockSwitched()
@@ -496,33 +744,38 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         var bar = settings.FindBar(Bar.Id);
         if (bar is null)
         {
-            StatusText = "Diese Leiste ist noch nicht übernommen.";
+            StatusText = "Diese Fläche ist noch nicht übernommen.";
             return;
         }
         foreach (var widget in bar.Widgets)
         {
             widget.FreeX = null;
+            widget.FreeLeft = null;
             widget.FreeY = null;
+            widget.FreeOffsetLeft = null;
+            widget.FreeOffsetTop = null;
         }
         _service.Save(settings);
         StatusText = "Freie Positionen zurückgesetzt.";
     }
 
-    private void AddWidget()
+    private void AddWidget(WidgetInfo info)
     {
-        if (NewWidget is null) return;
-        var entry = new WidgetEntry { Type = NewWidget.Type, Enabled = true, Position = 0.75 };
-        _expandedWidgets.Add(entry.Id); // neues Widget gleich zum Einstellen öffnen
+        var entry = new WidgetEntry { Type = info.Type, Enabled = true, Position = 0.75 };
+        info.Preset?.Invoke(entry);
         if (entry.IsFixed)
         {
             // Bevorzugt einen noch freien Bereich wählen.
             var used = WidgetRows.Where(r => r.IsFixed).Select(r => r.Slot).ToHashSet();
             entry.Slot = new[] { WidgetSlot.Center, WidgetSlot.Right, WidgetSlot.Left }.FirstOrDefault(s => !used.Contains(s), WidgetSlot.Right);
         }
-        WidgetRows.Add(CreateRow(entry));
+        var row = CreateRow(entry);
+        WidgetRows.Add(row);
         RebuildClockRows();
-        NewWidget = null;
-        StatusText = "Widget hinzugefügt – mit „Übernehmen“ auf die Leiste bringen.";
+        StatusText = $"{info.Name} hinzugefügt – mit „Übernehmen“ auf die Fläche bringen.";
+        IsAddWidgetOpen = false;
+        SetSelectedWidget(row); // neues Widget gleich rechts zum Einstellen öffnen
+        WidgetAdded?.Invoke(this, row);
     }
 
     private void RebuildAudioRows()
@@ -609,6 +862,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public ICommand ResetCommand { get; }
     public ICommand OpenSettingsFileCommand { get; }
     public ICommand OpenLogFolderCommand { get; }
+    public ICommand OpenBackupFolderCommand { get; }
     public ICommand RefreshMonitorsCommand { get; }
     public ICommand RefreshProcessesCommand { get; }
     public ICommand AddExcludedCommand { get; }
@@ -631,6 +885,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     public string SettingsFilePath => _service.FilePath;
     public string LogDirectory => Log.LogDirectory ?? "-";
+    public string BackupDirectory => SettingsService.BackupDirectoryPath;
     public string StatusText { get => _statusText; private set => SetProperty(ref _statusText, value); }
 
     // ---- Auswahllisten --------------------------------------------------------------------
@@ -751,6 +1006,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         OutputDeviceRows.Clear(); // keine "ungespeicherten" Werte übernehmen
         InputDeviceRows.Clear();
         RebuildAudioRows();
+        RebuildProfileRows();
         OnPropertyChanged(string.Empty); // alle Bindungen neu lesen
     }
 

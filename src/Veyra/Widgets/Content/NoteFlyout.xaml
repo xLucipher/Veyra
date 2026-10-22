@@ -1,0 +1,21 @@
+<w:FlyoutWindow x:Class="Veyra.Widgets.Content.NoteFlyout"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:w="clr-namespace:Veyra.Widgets"
+        Title="Notiz"
+        ThemeMode="Dark"
+        Width="380"
+        Background="#2A2B32">
+    <Border Style="{StaticResource FlyoutFrame}">
+        <StackPanel>
+            <DockPanel Margin="0,0,0,10">
+                <TextBlock DockPanel.Dock="Left" Text="&#xE70B;" Style="{StaticResource FlyoutGlyph}" FontSize="18" Margin="0,0,12,0" />
+                <TextBlock Text="Notiz" Style="{StaticResource FlyoutTitle}" VerticalAlignment="Center" />
+            </DockPanel>
+            <TextBox x:Name="Editor" Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}"
+                     AcceptsReturn="True" AcceptsTab="False" TextWrapping="Wrap" MinHeight="120" MaxHeight="420"
+                     VerticalScrollBarVisibility="Auto" SpellCheck.IsEnabled="True" />
+            <TextBlock Text="Wird beim Schließen gespeichert. Esc oder Klick daneben schließt." Style="{StaticResource FlyoutSubtitle}" Margin="0,8,0,0" />
+        </StackPanel>
+    </Border>
+</w:FlyoutWindow>

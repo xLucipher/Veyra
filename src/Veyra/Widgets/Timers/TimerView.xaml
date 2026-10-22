@@ -4,16 +4,17 @@
              Focusable="False"
              ToolTip="{Binding ToolTipText}"
              MouseLeftButtonUp="OnClick">
-    <!-- Sanduhr · je angezeigtem Timer: Name (optional), Restzeit und darunter ein leerlaufender Balken -->
+    <!-- Sanduhr · je angezeigtem Timer: Name (optional), Restzeit und darunter ein leerlaufender Balken.
+         Alles unten bündig: Der Balken endet auf Höhe der Unterkante der Sanduhr. -->
     <Border Style="{StaticResource WidgetHoverArea}" VerticalAlignment="Center">
         <StackPanel Orientation="Horizontal">
-            <Viewbox Width="16" Height="16" VerticalAlignment="Center">
+            <Viewbox Width="16" Height="16" VerticalAlignment="Bottom">
                 <Canvas Width="24" Height="24">
                     <Path Data="{Binding IconGeometry}" Stroke="{Binding IconBrush}" StrokeThickness="1.6"
                           StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                 </Canvas>
             </Viewbox>
-            <ItemsControl ItemsSource="{Binding BarItems}" Focusable="False" VerticalAlignment="Center">
+            <ItemsControl ItemsSource="{Binding BarItems}" Focusable="False" VerticalAlignment="Bottom">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Orientation="Horizontal" />
@@ -21,17 +22,22 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Grid Margin="7,0,0,0" VerticalAlignment="Center">
+                        <Grid Margin="7,0,0,0" VerticalAlignment="Bottom">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{Binding Name}" Visibility="{Binding NameVisibility}" MaxWidth="120" TextTrimming="CharacterEllipsis"
                                            FontFamily="{Binding DataContext.FontFamily, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                           Foreground="{Binding TextBrush}" Opacity="0.7" FontSize="12" VerticalAlignment="Center" Margin="0,0,5,0" />
+                                           Foreground="{Binding DataContext.NameBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                           Opacity="0.7" FontSize="12" VerticalAlignment="Center" Margin="0,0,5,0" />
                                 <TextBlock Text="{Binding RemainingText}" MinWidth="34"
                                            FontFamily="{Binding DataContext.FontFamily, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                            Foreground="{Binding TextBrush}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"
                                            Typography.NumeralAlignment="Tabular" />
                             </StackPanel>
-                            <Border Visibility="{Binding ProgressVisibility}" Height="2" CornerRadius="1" VerticalAlignment="Bottom" Margin="0,0,0,-4"
+                            <Border Grid.Row="1" Visibility="{Binding ProgressVisibility}" Height="2" CornerRadius="1" Margin="0,2,0,0"
                                     Background="{Binding DataContext.TrackBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
                                 <Border CornerRadius="1" Background="{Binding DataContext.AccentBrush, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                         RenderTransformOrigin="0,0.5">

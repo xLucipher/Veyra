@@ -1,0 +1,85 @@
+<w:FlyoutWindow x:Class="Veyra.Widgets.Media.MediaFlyout"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:w="clr-namespace:Veyra.Widgets"
+        Title="Wiedergabe wählen"
+        ThemeMode="Dark"
+        Width="380"
+        Background="#2A2B32">
+    <w:FlyoutWindow.Resources>
+        <!-- Kleine Steuer-Schaltfläche je Wiedergabe -->
+        <Style x:Key="RowButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+        </Style>
+    </w:FlyoutWindow.Resources>
+    <Border Style="{StaticResource FlyoutFrame}">
+        <StackPanel>
+            <TextBlock Text="Wiedergabe wählen" Style="{StaticResource FlyoutTitle}" />
+            <TextBlock Text="Klick auf eine Wiedergabe zeigt und steuert sie auf der Fläche." Style="{StaticResource FlyoutSubtitle}"
+                       TextWrapping="Wrap" />
+
+            <TextBlock Text="Gerade läuft nichts – z. B. Spotify, einen Player oder ein Video im Browser starten."
+                       Visibility="{Binding NoSourcesVisibility}" TextWrapping="Wrap" Opacity="0.7" Margin="0,14,0,0" />
+
+            <ScrollViewer MaxHeight="420" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+                <ItemsControl ItemsSource="{Binding Sources}" Focusable="False">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <!-- Ganze Zeile wählt die Wiedergabe; die Schaltflächen rechts steuern direkt diese Wiedergabe -->
+                            <Border x:Name="Row" CornerRadius="8" Padding="8" Margin="0,3" Cursor="Hand" Background="#14FFFFFF"
+                                    BorderThickness="1" BorderBrush="Transparent">
+                                <Border.InputBindings>
+                                    <MouseBinding MouseAction="LeftClick" Command="{Binding SelectCommand}" />
+                                </Border.InputBindings>
+                                <DockPanel>
+                                    <Grid DockPanel.Dock="Left" Width="44" Height="44" Margin="0,0,10,0" VerticalAlignment="Center">
+                                        <Border CornerRadius="6" Visibility="{Binding CoverVisibility}">
+                                            <Border.Background>
+                                                <ImageBrush ImageSource="{Binding Cover}" Stretch="UniformToFill" />
+                                            </Border.Background>
+                                        </Border>
+                                        <Border CornerRadius="6" Background="#1FFFFFFF" Visibility="{Binding PlaceholderVisibility}">
+                                            <TextBlock Text="&#xE8D6;" Style="{StaticResource FlyoutGlyph}" FontSize="18" Opacity="0.7"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                    </Grid>
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
+                                        <Button Style="{StaticResource RowButton}" Command="{Binding PreviousCommand}" IsEnabled="{Binding CanPrevious}" ToolTip="Vorheriger Titel">
+                                            <TextBlock Text="&#xE892;" Style="{StaticResource FlyoutGlyph}" FontSize="12" />
+                                        </Button>
+                                        <Button Style="{StaticResource RowButton}" Command="{Binding PlayPauseCommand}" IsEnabled="{Binding CanPlayPause}" ToolTip="Wiedergabe / Pause">
+                                            <TextBlock Text="{Binding PlayPauseGlyph}" Style="{StaticResource FlyoutGlyph}" FontSize="14" />
+                                        </Button>
+                                        <Button Style="{StaticResource RowButton}" Command="{Binding NextCommand}" IsEnabled="{Binding CanNext}" ToolTip="Nächster Titel">
+                                            <TextBlock Text="&#xE893;" Style="{StaticResource FlyoutGlyph}" FontSize="12" />
+                                        </Button>
+                                    </StackPanel>
+                                    <StackPanel VerticalAlignment="Center" Opacity="{Binding TextOpacity}">
+                                        <TextBlock FontSize="11.5" Opacity="0.65" TextTrimming="CharacterEllipsis">
+                                            <Run Text="{Binding Source, Mode=OneWay}" FontWeight="SemiBold" /><Run Text="  ·  " /><Run Text="{Binding StateText, Mode=OneWay}" />
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
+                                        <TextBlock Text="{Binding Artist}" Visibility="{Binding ArtistVisibility}" FontSize="12" Opacity="0.75" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+                            <DataTemplate.Triggers>
+                                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Row" Property="Background" Value="#24FFFFFF" />
+                                </Trigger>
+                                <!-- Gewählt: blaue Umrandung wie die Markierung der Audio-Widgets -->
+                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                    <Setter TargetName="Row" Property="BorderBrush" Value="#3DAEE9" />
+                                    <Setter TargetName="Row" Property="Background" Value="#263DAEE9" />
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </StackPanel>
+    </Border>
+</w:FlyoutWindow>

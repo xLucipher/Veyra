@@ -26,7 +26,7 @@
             <!-- Lautstärke je App (relativ zur Gerätelautstärke, wie im Windows-Lautstärkemixer) -->
             <StackPanel Visibility="{Binding AppsVisibility}">
                 <Border Style="{StaticResource FlyoutDivider}" />
-                <TextBlock Text="{Binding AppsTitle}" FontSize="12.5" Opacity="0.6" Margin="0,0,0,4" />
+                <TextBlock Text="Apps" FontSize="12.5" Opacity="0.6" Margin="0,0,0,4" />
                 <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding Apps}" Focusable="False">
                         <ItemsControl.ItemTemplate>

@@ -1,5 +1,6 @@
 using Veyra.Configuration;
 using Veyra.Core;
+using Veyra.Profiles;
 
 namespace Veyra.Bar;
 
@@ -16,19 +17,25 @@ public sealed class BarManager : IDisposable
     private readonly List<BarController> _bars = [];
 
     private readonly WidgetServices _services = new();
+    private readonly ProfileSwitcher _profiles;
     private bool _autoHideWarningLogged;
     private bool _disposed;
 
     /// <param name="openSettings">Öffnet die Einstellungen, optional mit der angegebenen Leiste ausgewählt.</param>
-    public BarManager(SettingsService settings, Action<string?> openSettings, Action exit)
+    /// <param name="openProfileSettings">Öffnet die Einstellungen auf der Seite „Profile“.</param>
+    public BarManager(SettingsService settings, Action<string?> openSettings, Action openProfileSettings, Action exit)
     {
         _settings = settings;
         _openSettings = openSettings;
         _exit = exit;
+        _profiles = new ProfileSwitcher(settings, openProfileSettings);
     }
 
     /// <summary>True, solange eine Leiste wegen einer Vollbildanwendung ausgeblendet ist (dann nicht stören).</summary>
     public bool IsHiddenForFullscreen => _bars.Any(b => b.IsHiddenForFullscreen);
+
+    /// <summary>Profilwechsel (Overlay, Tastenkürzel) – auch für Kontextmenü und Einstellungen.</summary>
+    public ProfileSwitcher Profiles => _profiles;
 
     public void Start()
     {
@@ -41,16 +48,27 @@ public sealed class BarManager : IDisposable
     /// <summary>Kontextmenü "Leiste neu laden": Konfiguration neu einlesen und alle Leisten neu aufbauen.</summary>
     public void Reload()
     {
-        Log.Info("Bar", "Leisten werden neu geladen");
+        Log.Info("Bar", "Flächen werden neu geladen");
         _settings.ReloadFromDisk();
         foreach (var bar in _bars) bar.Rebuild();
         RefreshHotkeys();
     }
 
-    /// <summary>Notfall-Aufräumen aus dem Absturz-Handler (beliebiger Thread): reservierte Bildschirmbereiche freigeben.</summary>
+    /// <summary>
+    /// Notfall-Aufräumen aus dem Absturz-Handler (beliebiger Thread): reservierte Bildschirmbereiche freigeben und
+    /// den Nachtmodus zurücknehmen, damit der Bildschirm nicht verfärbt bleibt.
+    /// </summary>
     public void EmergencyCleanup()
     {
         foreach (var bar in _bars.ToArray()) bar.EmergencyCleanup();
+        try
+        {
+            Monitors.NightLight.Restore();
+        }
+        catch
+        {
+            // Im Absturzpfad nichts mehr werfen.
+        }
     }
 
     public void Dispose()
@@ -60,6 +78,7 @@ public sealed class BarManager : IDisposable
         _settings.Changed -= OnSettingsChanged;
         HotkeyCapture.Changed -= OnHotkeyCaptureChanged;
         foreach (var bar in _bars) bar.Dispose();
+        _profiles.Dispose();
         _bars.Clear();
         _services.Dispose();
     }
@@ -75,7 +94,7 @@ public sealed class BarManager : IDisposable
     {
         foreach (var removed in _bars.Where(c => settings.FindBar(c.BarId) is null).ToList())
         {
-            Log.Info("Bar", $"Leiste {removed.BarId} entfernt");
+            Log.Info("Bar", $"Fläche {removed.BarId} entfernt");
             removed.Dispose();
             _bars.Remove(removed);
         }
@@ -89,8 +108,8 @@ public sealed class BarManager : IDisposable
                 continue;
             }
 
-            Log.Info("Bar", $"Leiste „{bar.Name}“ ({bar.Id}) wird erzeugt");
-            controller = new BarController(_settings, bar.Id, _services, id => _openSettings(id), Reload, _exit);
+            Log.Info("Bar", $"Fläche „{bar.Name}“ ({bar.Id}) wird erzeugt");
+            controller = new BarController(_settings, bar.Id, _services, id => _openSettings(id), Reload, _exit, _profiles);
             _bars.Add(controller);
             controller.Start();
         }
@@ -108,6 +127,7 @@ public sealed class BarManager : IDisposable
     private void RefreshHotkeys()
     {
         foreach (var bar in _bars) bar.UnregisterHotkeys();
+        _profiles.RefreshHotkey(suspended: HotkeyCapture.IsActive);
         if (HotkeyCapture.IsActive) return; // Eingabe im Einstellungsfenster läuft – danach wieder anmelden
         foreach (var bar in _bars) bar.RegisterHotkeys();
     }
@@ -121,7 +141,7 @@ public sealed class BarManager : IDisposable
 
         if (settings.Behavior.AutoHide && !_autoHideWarningLogged)
         {
-            Log.Warning("Bar", "'AutoHide' ist noch nicht implementiert – die Leiste bleibt sichtbar.");
+            Log.Warning("Bar", "'AutoHide' ist noch nicht implementiert – die Fläche bleibt sichtbar.");
             _autoHideWarningLogged = true;
         }
     }

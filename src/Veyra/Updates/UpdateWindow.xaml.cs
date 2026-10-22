@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Documents;
 using Veyra.Core;
 
 namespace Veyra.Updates;
@@ -26,7 +27,10 @@ public partial class UpdateWindow : Window
         _exitApplication = exitApplication;
 
         VersionText.Text = $"Version {update.Version} ist verfügbar – installiert ist {UpdateService.CurrentVersion}.";
-        NotesText.Text = string.IsNullOrWhiteSpace(update.Notes) ? "Keine Beschreibung vorhanden." : CleanMarkdown(update.Notes);
+        if (string.IsNullOrWhiteSpace(update.Notes))
+            NotesText.Text = "Keine Beschreibung vorhanden.";
+        else
+            ShowNotes(update.Notes);
     }
 
     /// <summary>Entscheidung des Benutzers; Schließen über das X zählt als "Später".</summary>
@@ -84,7 +88,7 @@ public partial class UpdateWindow : Window
             });
             string folderWithNewFiles = await UpdateService.DownloadAndExtractAsync(_update, progress, _download.Token);
 
-            ProgressText.Text = "Installiere – die Leiste startet gleich neu …";
+            ProgressText.Text = "Installiere – Veyra startet gleich neu …";
             Progress.IsIndeterminate = true;
             UpdateService.LaunchInstaller(folderWithNewFiles);
             await Task.Delay(400);
@@ -113,11 +117,25 @@ public partial class UpdateWindow : Window
         ErrorText.Visibility = Visibility.Visible;
     }
 
-    /// <summary>Release-Notizen sind Markdown – für die Anzeige die gröbsten Zeichen entfernen.</summary>
-    private static string CleanMarkdown(string text) =>
-        string.Join('\n', text.Replace("\r", "").Split('\n').Select(line =>
+    /// <summary>
+    /// Release-Notizen sind Markdown – für die Anzeige die gröbsten Zeichen entfernen. Überschriften werden fett,
+    /// "## Neu in Veyra …" etwas größer, damit mehrere übersprungene Versionen klar getrennt sind.
+    /// </summary>
+    private void ShowNotes(string text)
+    {
+        var lines = text.Replace("\r", "").Split('\n');
+        for (int i = 0; i < lines.Length; i++)
         {
+            string line = lines[i];
+            int level = line.TakeWhile(c => c == '#').Count();
             string l = line.TrimStart('#', ' ').Replace("**", "").Replace("`", "");
-            return l.StartsWith("- ") || l.StartsWith("* ") ? "•  " + l[2..] : l;
-        }));
+            if (l.StartsWith("- ") || l.StartsWith("* ")) l = "•  " + l[2..];
+
+            var run = new Run(l);
+            if (level > 0) run.FontWeight = FontWeights.SemiBold;
+            if (level is 1 or 2) run.FontSize = 15;
+            NotesText.Inlines.Add(run);
+            if (i < lines.Length - 1) NotesText.Inlines.Add(new LineBreak());
+        }
+    }
 }

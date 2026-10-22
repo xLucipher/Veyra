@@ -1,0 +1,70 @@
+<UserControl x:Class="Veyra.Widgets.Media.MediaView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:media="clr-namespace:Veyra.Widgets.Media"
+             Focusable="False"
+             Visibility="{Binding Visibility}"
+             ToolTip="{Binding ToolTipText}">
+    <UserControl.Resources>
+        <!-- Kleine runde Steuer-Schaltfläche: Hover wie die übrigen Widgets, ausgegraut, wenn die App sie nicht anbietet -->
+        <Style x:Key="MediaButton" TargetType="Border" BasedOn="{StaticResource WidgetHoverArea}">
+            <Setter Property="Padding" Value="6,5" />
+            <Setter Property="Margin" Value="0" />
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.35" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <!-- Klickbarer Bereich Cover + Titel: Hover wie die übrigen Widgets, schmaler Rand -->
+        <Style x:Key="SourceArea" TargetType="Border" BasedOn="{StaticResource WidgetHoverArea}">
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="Margin" Value="-4,0,0,0" />
+        </Style>
+        <Style x:Key="MediaGlyph" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource WidgetIconFont}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </UserControl.Resources>
+    <!-- Cover · Titel/Interpret · Zurück, Wiedergabe/Pause, Weiter -->
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0" Background="Transparent">
+        <!-- Cover und Titel: Klick öffnet die Auswahl aller Wiedergaben -->
+        <Border Style="{StaticResource SourceArea}" MouseLeftButtonUp="OnSourceClick" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal">
+                <Border Visibility="{Binding CoverVisibility}" Width="28" Height="28" CornerRadius="4" VerticalAlignment="Center" Margin="0,0,8,0">
+                    <Border.Background>
+                        <ImageBrush ImageSource="{Binding Cover}" Stretch="UniformToFill" />
+                    </Border.Background>
+                </Border>
+                <!-- Feste Breite ohne Cover: dezenter Platzhalter, damit die Schaltflächen an ihrer Stelle bleiben -->
+                <Border Visibility="{Binding CoverPlaceholderVisibility}" Width="28" Height="28" CornerRadius="4" VerticalAlignment="Center" Margin="0,0,8,0"
+                        BorderBrush="{Binding IconBrush}" BorderThickness="1" Opacity="0.35">
+                    <TextBlock Text="&#xE8D6;" Style="{StaticResource MediaGlyph}" Foreground="{Binding IconBrush}" HorizontalAlignment="Center" />
+                </Border>
+                <!-- Text: feste Breite (TextWidth) oder nach Inhalt bis MaxTextWidth; zu lange Titel laufen durch (oder enden mit „…“) -->
+                <StackPanel VerticalAlignment="Center" Width="{Binding TextWidth}" MaxWidth="{Binding MaxTextWidth}" Opacity="{Binding TextOpacity}">
+                    <media:MarqueeText Text="{Binding Title}" IsScrollEnabled="{Binding ScrollText}" HorizontalAlignment="Left"
+                                       TextElement.FontFamily="{Binding FontFamily}" TextElement.FontSize="12.5" TextElement.FontWeight="SemiBold"
+                                       TextElement.Foreground="{Binding Foreground}" />
+                    <media:MarqueeText Text="{Binding Artist}" IsScrollEnabled="{Binding ScrollText}" HorizontalAlignment="Left"
+                                       Visibility="{Binding ArtistVisibility}" Opacity="0.7"
+                                       TextElement.FontFamily="{Binding FontFamily}" TextElement.FontSize="11"
+                                       TextElement.Foreground="{Binding Foreground}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+        <StackPanel Orientation="Horizontal" Visibility="{Binding ControlsVisibility}" VerticalAlignment="Center" Margin="6,0,0,0">
+            <Border Style="{StaticResource MediaButton}" IsEnabled="{Binding CanPrevious}" MouseLeftButtonUp="OnPrevious" ToolTip="Vorheriger Titel">
+                <TextBlock Text="&#xE892;" Style="{StaticResource MediaGlyph}" Foreground="{Binding IconBrush}" />
+            </Border>
+            <Border Style="{StaticResource MediaButton}" IsEnabled="{Binding CanPlayPause}" MouseLeftButtonUp="OnPlayPause" ToolTip="Wiedergabe / Pause">
+                <TextBlock Text="{Binding PlayPauseGlyph}" Style="{StaticResource MediaGlyph}" FontSize="15" Foreground="{Binding IconBrush}" />
+            </Border>
+            <Border Style="{StaticResource MediaButton}" IsEnabled="{Binding CanNext}" MouseLeftButtonUp="OnNext" ToolTip="Nächster Titel">
+                <TextBlock Text="&#xE893;" Style="{StaticResource MediaGlyph}" Foreground="{Binding IconBrush}" />
+            </Border>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

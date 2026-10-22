@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using Veyra.Core;
+using Veyra.Interop;
 using Veyra.Monitors;
 using static Veyra.Interop.NativeMethods;
 
@@ -20,6 +21,9 @@ public abstract class FlyoutWindow : Window
     private static FrameworkElement? _lastClosedAnchor;
     private static DateTime _lastClosedUtc;
 
+    /// <summary>Vom Benutzer verschobene Popups: zuletzt gewählte Position (physische Pixel) je Popup-Art, bis zum Beenden.</summary>
+    private static readonly Dictionary<Type, POINT> MovedPositions = [];
+
     private FrameworkElement? _anchor;
     private int _anchorX;
     private int _anchorY;
@@ -27,6 +31,9 @@ public abstract class FlyoutWindow : Window
     private int _barBottom;
     private bool _placed;
     private bool _closing;
+
+    /// <summary>Mit der Maus verschiebbar (an jeder Stelle ohne eigene Klickfunktion, z. B. Kopfzeile).</summary>
+    protected bool IsDraggable { get; init; }
 
     protected FlyoutWindow()
     {
@@ -109,6 +116,11 @@ public abstract class FlyoutWindow : Window
         SetWindowLongPtr(handle, GWL_EXSTYLE, new IntPtr(exStyle));
         int round = 2; // DWMWCP_ROUND
         DwmSetWindowAttribute(handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
+
+        // Vom Benutzer verschoben: schon vor dem ersten Anzeigen dorthin, sonst blitzt es kurz unter dem Widget auf.
+        // Das genaue Einpassen in den Monitor folgt nach dem Rendern (Place), dann ohne sichtbaren Sprung.
+        if (MovedPositions.TryGetValue(GetType(), out var moved))
+            SetWindowPos(handle, IntPtr.Zero, moved.X, moved.Y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     protected override void OnContentRendered(EventArgs e)
@@ -123,6 +135,21 @@ public abstract class FlyoutWindow : Window
         var handle = new WindowInteropHelper(this).Handle;
         if (handle == IntPtr.Zero) return;
         GetWindowRect(handle, out var rect);
+
+        if (MovedPositions.TryGetValue(GetType(), out var moved))
+        {
+            // Vom Benutzer verschoben: dort bleiben, nur im sichtbaren Bereich halten.
+            var target = new RECT(moved.X, moved.Y, moved.X + rect.Width, moved.Y + rect.Height);
+            var hMonitor = MonitorFromRect(ref target, MONITOR_DEFAULTTONEAREST);
+            if (MonitorService.Query(hMonitor) is { } m)
+            {
+                moved.X = Math.Clamp(moved.X, m.WorkArea.Left, Math.Max(m.WorkArea.Left, m.WorkArea.Right - rect.Width));
+                moved.Y = Math.Clamp(moved.Y, m.WorkArea.Top, Math.Max(m.WorkArea.Top, m.WorkArea.Bottom - rect.Height));
+            }
+            SetWindowPos(handle, IntPtr.Zero, moved.X, moved.Y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            return;
+        }
+
         int x = _anchorX - rect.Width / 2;
 
         // Innerhalb des Monitors halten.
@@ -137,6 +164,28 @@ public abstract class FlyoutWindow : Window
         }
 
         SetWindowPos(handle, IntPtr.Zero, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
+    {
+        base.OnMouseLeftButtonDown(e);
+        // Schaltflächen (Tage, Monatspfeile, „Heute“) behandeln ihren Klick selbst – hier kommt nur der Rest an.
+        if (!IsDraggable || e.Handled) return;
+        var handle = new WindowInteropHelper(this).Handle;
+        GetWindowRect(handle, out var before);
+        try
+        {
+            DragMove();
+        }
+        catch (InvalidOperationException)
+        {
+            return;
+        }
+
+        // Nur ein echtes Verschieben merken, kein bloßer Klick.
+        if (GetWindowRect(handle, out var rect) && (rect.Left != before.Left || rect.Top != before.Top))
+            MovedPositions[GetType()] = new POINT { X = rect.Left, Y = rect.Top };
+        e.Handled = true;
     }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)

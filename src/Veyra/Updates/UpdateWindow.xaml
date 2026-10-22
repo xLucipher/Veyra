@@ -24,7 +24,7 @@
             </StackPanel>
         </DockPanel>
 
-        <TextBlock Text="Soll das Update jetzt installiert werden? Die Leiste startet danach automatisch neu, deine Einstellungen bleiben erhalten."
+        <TextBlock Text="Soll das Update jetzt installiert werden? Veyra startet danach automatisch neu, deine Einstellungen bleiben erhalten."
                    TextWrapping="Wrap" Margin="0,0,0,12" />
 
         <!-- Neuerungen -->

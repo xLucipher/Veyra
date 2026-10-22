@@ -19,6 +19,7 @@ public partial class CalendarFlyout : FlyoutWindow
     {
         InitializeComponent();
         _culture = culture;
+        IsDraggable = true;
 
         Language = XmlLanguage.GetLanguage(culture.IetfLanguageTag);
         MonthCalendar.FirstDayOfWeek = culture.DateTimeFormat.FirstDayOfWeek;

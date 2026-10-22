@@ -9,11 +9,18 @@ using Veyra.Interop;
 using Veyra.Monitors;
 using Veyra.Widgets;
 using Veyra.Widgets.Audio;
+using Veyra.Widgets.Brightness;
+using Veyra.Widgets.ClipboardHistory;
 using Veyra.Widgets.Clock;
+using Veyra.Widgets.Content;
+using Veyra.Widgets.Draw;
+using Veyra.Widgets.Launcher;
+using Veyra.Widgets.Media;
 using Veyra.Widgets.Metrics;
 using Veyra.Widgets.Network;
 using Veyra.Widgets.Timers;
 using Veyra.Widgets.Volume;
+using Veyra.Widgets.Weather;
 
 namespace Veyra.Bar;
 
@@ -29,8 +36,10 @@ public sealed class BarController : IDisposable
     private readonly Action<string> _openSettings;
     private readonly Action _reload;
     private readonly Action _exit;
+    private readonly Profiles.ProfileSwitcher _profiles;
     private readonly FullscreenDetector _detector = new();
     private readonly DispatcherTimer _layoutDebounce;
+    private readonly DispatcherTimer _remarkTimer;
     private readonly List<IBarWidget> _widgets = [];
 
     private string _widgetLayout = "";
@@ -38,11 +47,21 @@ public sealed class BarController : IDisposable
     private TopBarWindow? _window;
     private MonitorInfo? _monitor;
     private bool _hiddenForFullscreen;
+    private IntPtr _fullscreenWindow;
+    private FullscreenKind _fullscreenKind;
+    private bool _reservationDeferred;
+    private IntPtr _fittedWindow;
+    private IntPtr _markedWindow;
+    private IntPtr _fitGivenUpWindow;
+    private long _fitStart;
+    private int _fitCount;
+    private long _remarkStart;
+    private int _remarkCount;
     private bool _forceNextLayout;
     private bool _disposed;
 
     public BarController(SettingsService settings, string barId, WidgetServices services,
-        Action<string> openSettings, Action reload, Action exit)
+        Action<string> openSettings, Action reload, Action exit, Profiles.ProfileSwitcher profiles)
     {
         _settings = settings;
         BarId = barId;
@@ -50,6 +69,7 @@ public sealed class BarController : IDisposable
         _openSettings = openSettings;
         _reload = reload;
         _exit = exit;
+        _profiles = profiles;
 
         // Anzeigeänderungen kommen oft als Salve (mehrere WM_DISPLAYCHANGE/DPI-Nachrichten) → bündeln.
         _layoutDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
@@ -60,6 +80,13 @@ public sealed class BarController : IDisposable
             _forceNextLayout = false;
             UpdatePlacement(force);
             _detector.RequestEvaluation();
+        };
+
+        _remarkTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        _remarkTimer.Tick += (_, _) =>
+        {
+            _remarkTimer.Stop();
+            RemarkFittedWindow();
         };
     }
 
@@ -79,6 +106,13 @@ public sealed class BarController : IDisposable
         _detector.ForegroundChanged += (_, _) => KeepOnTop();
         // Sofort prüfen, nicht gebündelt: Jede Verzögerung wäre als kurzes Aufblitzen der Taskleiste sichtbar.
         _detector.ZOrderChanged += (_, _) => StayAboveTaskbar();
+        _detector.Evaluated += (_, _) =>
+        {
+            // Vollbildfenster geschlossen oder minimiert → aufgeschobene Reservierung jetzt nachholen.
+            if (_reservationDeferred && !DefersReservation()) UpdatePlacement(force: true);
+            // Leiste im Spiel sichtbar: Spiele setzen ihr Fenster gern wieder auf den ganzen Monitor zurück.
+            FitGameBelowBar();
+        };
 
         BuildBar();
         _detector.Start();
@@ -110,6 +144,7 @@ public sealed class BarController : IDisposable
         if (_disposed) return;
         _disposed = true;
         _layoutDebounce.Stop();
+        _remarkTimer.Stop();
         _detector.Dispose();
         TearDownBar();
     }
@@ -120,10 +155,12 @@ public sealed class BarController : IDisposable
         var bar = Bar(settings);
         if (bar is null) return;
 
-        _viewModel = new TopBarViewModel(() => _openSettings(BarId), _reload, _exit, ToggleLock);
+        _viewModel = new TopBarViewModel(() => _openSettings(BarId), _reload, _exit, ToggleLock,
+            _profiles.ShowOverlay, _profiles.SwitchTo, ToggleWidgetLock, DescribeWidget);
         var window = new TopBarWindow(_viewModel, bar.Appearance.IsDynamic, bar.Appearance.NeedsTransparency);
         _window = window;
         window.WidgetPanel.WidgetMoved += OnWidgetMoved;
+        window.WidgetPanel.FreePositionsPinned += OnFreePositionsPinned;
         window.UserBoundsChanged += OnUserBoundsChanged;
         CreateWidgets(settings, bar);
 
@@ -143,6 +180,8 @@ public sealed class BarController : IDisposable
         window.FullscreenAppNotification += (_, opening) =>
         {
             Log.Debug("Fullscreen", $"ABN_FULLSCREENAPP: {(opening ? "Vollbild-App geöffnet" : "Vollbild-App geschlossen")}");
+            // Die Taskleiste hält das eingepasste Spiel nicht mehr für Vollbild (z. B. nach einer Größenänderung) → neu melden.
+            if (!opening) ScheduleRemark();
             _detector.RequestEvaluation();
         };
 
@@ -170,13 +209,26 @@ public sealed class BarController : IDisposable
                 WidgetType.Clock => new ClockWidget(entry.Id),
                 WidgetType.AudioOutputs => new AudioDevicesWidget(entry.Id, AudioFlow.Output, _services.Audio),
                 WidgetType.AudioInputs => new AudioDevicesWidget(entry.Id, AudioFlow.Input, _services.Audio),
-                WidgetType.Cpu or WidgetType.Gpu or WidgetType.Ram or WidgetType.GpuTemperature =>
-                    new MetricWidget(entry.Id, entry.Type, _services.SystemMonitor),
+                _ when entry.IsMetric => new MetricWidget(entry.Id, entry.Type, _services.SystemMonitor),
                 WidgetType.Network => new NetworkWidget(entry.Id, _services.NetworkStatus),
                 WidgetType.NetworkTraffic => new TrafficWidget(entry.Id, _services.NetworkTraffic),
                 WidgetType.Volume => new VolumeWidget(entry.Id, _services.Volume),
                 WidgetType.Timer => new TimerWidget(entry.Id, _services.Timers, UpdateEntry),
                 WidgetType.Stopwatch => new StopwatchWidget(entry.Id, _services.Timers),
+                WidgetType.Image => new ImageWidget(entry.Id),
+                WidgetType.Note => new NoteWidget(entry.Id, UpdateEntry),
+                WidgetType.Media => new MediaWidget(entry.Id, _services.Media),
+                WidgetType.Countdown => new CountdownWidget(entry.Id),
+                WidgetType.Separator => new SeparatorWidget(entry.Id),
+                WidgetType.Draw => new DrawWidget(entry.Id, UpdateEntry),
+                WidgetType.Clipboard => new ClipboardWidget(entry.Id, _services.Clipboard, UpdateEntry),
+                WidgetType.WorldClock => new WorldClockWidget(entry.Id),
+                WidgetType.Launcher => new LauncherWidget(entry.Id, UpdateEntry),
+                WidgetType.Weather => new WeatherWidget(entry.Id),
+                WidgetType.PublicIp => new PublicIpWidget(entry.Id, _services.PublicIp),
+                WidgetType.DeviceBattery => new DeviceBatteryWidget(entry.Id, _services.DeviceBattery),
+                WidgetType.Brightness => new BrightnessWidget(entry.Id, _services.Brightness, UpdateEntry),
+                WidgetType.Fps => new FpsWidget(entry.Id, _services.Fps),
                 _ => null,
             };
             if (widget is null) continue;
@@ -194,7 +246,12 @@ public sealed class BarController : IDisposable
     /// <summary>Überträgt Bereich, Abstände und Positionen auf die Widget-Ansichten (ohne Neuaufbau).</summary>
     private void ApplyWidgetLayout(BarSettings bar)
     {
-        if (_window is not null) _window.WidgetPanel.FreePlacement = bar.Appearance.FreeWidgetPlacement;
+        if (_window is not null)
+        {
+            _window.WidgetPanel.FreePlacement = bar.Appearance.FreeWidgetPlacement;
+            // Fixierte Leiste: zu viele Widgets brechen in eine zweite Zeile um, wenn die Leiste hoch genug ist.
+            _window.WidgetPanel.AllowWrap = !bar.Appearance.IsDynamic;
+        }
         foreach (var widget in _widgets)
         {
             var view = widget.View;
@@ -206,7 +263,11 @@ public sealed class BarController : IDisposable
             BarLayoutPanel.SetInnerSpacing(view, entry.InnerSpacing);
             BarLayoutPanel.SetPosition(view, entry.Position);
             BarLayoutPanel.SetFreeX(view, entry.FreeX ?? double.NaN);
+            BarLayoutPanel.SetFreeLeft(view, entry.FreeLeft ?? double.NaN);
             BarLayoutPanel.SetFreeY(view, entry.FreeY ?? double.NaN);
+            BarLayoutPanel.SetFreeOffsetLeft(view, entry.FreeOffsetLeft ?? double.NaN);
+            BarLayoutPanel.SetFreeOffsetTop(view, entry.FreeOffsetTop ?? double.NaN);
+            BarLayoutPanel.SetIsWidgetLocked(view, entry.Locked);
             // LayoutTransform statt RenderTransform: Das Layout rechnet mit der vergrößerten Fläche (keine Überlappung im normalen Modus).
             view.LayoutTransform = Math.Abs(entry.Scale - 1) < 0.001
                 ? System.Windows.Media.Transform.Identity
@@ -220,11 +281,10 @@ public sealed class BarController : IDisposable
         var settings = _settings.Current.Clone();
         var entry = Bar(settings)?.Widgets.FirstOrDefault(w => w.Id == e.WidgetId);
         if (entry is null) return;
-        if (e.Free is { } free)
+        if (e.Offset is { } offset)
         {
-            entry.FreeX = Math.Round(free.X, 4);
-            entry.FreeY = Math.Round(free.Y, 4);
-            Log.Info("Bar", $"{Name}: Widget {entry.Type} ({entry.Id}) frei platziert auf {entry.FreeX:P1} / {entry.FreeY:P1}");
+            SetFreeOffset(entry, offset);
+            Log.Info("Bar", $"{Name}: Widget {entry.Type} ({entry.Id}) frei platziert, {offset.X:0} px von links / {offset.Y:0} px von oben");
         }
         else
         {
@@ -232,6 +292,37 @@ public sealed class BarController : IDisposable
             Log.Info("Bar", $"{Name}: Widget {entry.Type} ({entry.Id}) verschoben auf {entry.Position:P1}");
         }
         _settings.Save(settings);
+    }
+
+    /// <summary>
+    /// Freie Platzierung: Widgets ohne festen Abstand (neu oder aus älteren Konfigurationen mit Anteilen der
+    /// Flächengröße) wurden dort festgehalten, wo sie stehen → in einem Rutsch speichern.
+    /// </summary>
+    private void OnFreePositionsPinned(object? sender, FreePositionsPinnedEventArgs e)
+    {
+        var settings = _settings.Current.Clone();
+        var bar = Bar(settings);
+        if (bar is null) return;
+        int count = 0;
+        foreach (var (id, offset) in e.Widgets)
+        {
+            if (bar.Widgets.FirstOrDefault(w => w.Id == id) is not { } entry) continue;
+            SetFreeOffset(entry, offset);
+            count++;
+        }
+        if (count == 0) return;
+        Log.Info("Bar", $"{Name}: {count} Widget(s) mit festem Abstand zum Rand übernommen");
+        _settings.Save(settings);
+    }
+
+    /// <summary>Fester Abstand zum linken und oberen Rand; die alten Anteile der Flächengröße sind damit abgelöst.</summary>
+    private static void SetFreeOffset(WidgetEntry entry, System.Windows.Point offset)
+    {
+        entry.FreeOffsetLeft = Math.Round(offset.X, 1);
+        entry.FreeOffsetTop = Math.Round(offset.Y, 1);
+        entry.FreeX = null;
+        entry.FreeLeft = null;
+        entry.FreeY = null;
     }
 
     /// <summary>Ein Widget ändert seinen eigenen Eintrag (z. B. Timer im Popup bearbeitet) → dauerhaft speichern.</summary>
@@ -320,6 +411,10 @@ public sealed class BarController : IDisposable
         DisposeWidgets();
         _viewModel = null;
 
+        // Fenster weg (Beenden, Leiste entfernt, Neuaufbau z. B. beim Profilwechsel fixiert → dynamisch): Mit ihm
+        // endet die Reservierung – ein darunter eingepasstes Spiel bekommt den ganzen Monitor zurück.
+        RestoreFittedWindow();
+
         if (_window is not null)
         {
             _window.Close(); // gibt AppBar, Shell-Hook und Sitzungsbenachrichtigung frei
@@ -375,10 +470,13 @@ public sealed class BarController : IDisposable
     {
         _detector.Configure(settings.Behavior);
         _viewModel?.Apply(bar);
+        _viewModel?.ApplyProfiles(settings);
         foreach (var widget in _widgets) widget.ApplySettings(settings, bar);
 
         if (_window is not null)
         {
+            // "Position sperren" gilt in jedem Modus für die Widgets, im dynamischen Modus zusätzlich für das Fenster.
+            _window.WidgetPanel.IsLocked = bar.Appearance.LockPosition;
             if (_window.IsDynamic)
             {
                 _window.Layer = bar.Appearance.Layer;
@@ -387,7 +485,7 @@ public sealed class BarController : IDisposable
             }
             else
             {
-                _window.Topmost = settings.Behavior.AlwaysOnTop;
+                _window.Topmost = bar.Appearance.AlwaysOnTop != false;
             }
 
             var appBar = _window.AppBar;
@@ -396,6 +494,7 @@ public sealed class BarController : IDisposable
                 // Reservierung aufheben: neu registrieren (nur noch Benachrichtigungen, kein reservierter Bereich).
                 appBar.Reset();
                 Log.Info("AppBar", $"{bar.Name}: Reservierter Bildschirmbereich freigegeben");
+                RestoreFittedWindow();
             }
         }
     }
@@ -428,8 +527,22 @@ public sealed class BarController : IDisposable
         _detector.Monitor = monitor;
 
         RECT rect = BarPlacement.Compute(bar.Appearance, monitor);
+        _reservationDeferred = false;
         if (ReservesScreenSpace(settings, bar) && window.AppBar is { } appBar)
-            rect = appBar.Reserve(rect, force || monitorChanged);
+        {
+            if (DefersReservation())
+            {
+                // Ein Spiel läuft (evtl. per Alt+Tab im Hintergrund), in dem die Leiste ausgeblendet wird: Den Arbeitsbereich
+                // jetzt zu ändern würde sein Vollbildfenster unter die Leiste schieben. Erst nachholen, wenn es weg ist.
+                _reservationDeferred = !appBar.IsReserving || force || monitorChanged;
+                if (appBar.IsReserving) rect = appBar.ReservedRect;
+            }
+            else
+            {
+                rect = appBar.Reserve(rect, force || monitorChanged);
+            }
+        }
+        _detector.ReservedArea = window.AppBar is { IsReserving: true } reserving ? reserving.ReservedRect : null;
 
         window.ApplyBounds(rect);
         KeepOnTop();
@@ -441,16 +554,19 @@ public sealed class BarController : IDisposable
 
     private void ApplyVisibility()
     {
-        var behavior = _settings.Current.Behavior;
         var state = _detector.State;
-        bool hide = state.Kind switch
-        {
-            FullscreenKind.Exclusive => behavior.HideOnFullscreen,
-            FullscreenKind.Borderless => behavior.HideOnBorderlessFullscreen,
-            _ => false,
-        };
+        bool hide = HidesFor(state.Kind, _settings.Current.Behavior);
 
-        if (hide == _hiddenForFullscreen) return;
+        // Merken, solange es lebt – auch nach Alt+Tab auf den Desktop (siehe UpdatePlacement).
+        if (state.Kind != FullscreenKind.None) (_fullscreenWindow, _fullscreenKind) = (state.Window, state.Kind);
+        else _fitGivenUpWindow = IntPtr.Zero; // Vollbild verlassen → beim nächsten Mal wieder versuchen
+        if (hide && state.Squeezed) RestoreSqueezedWindow(state.Window);
+
+        if (hide == _hiddenForFullscreen)
+        {
+            if (!hide) FitGameBelowBar();
+            return;
+        }
         _hiddenForFullscreen = hide;
 
         var window = _window;
@@ -468,7 +584,158 @@ public sealed class BarController : IDisposable
             window.Show(); // ShowActivated=False → SW_SHOWNA, kein Fokuswechsel
             UpdatePlacement(force: false);
             Log.Info("Bar", $"{Name}: wieder eingeblendet");
+            FitGameBelowBar();
         }
+    }
+
+    private static bool HidesFor(FullscreenKind kind, BehaviorSettings behavior) => kind switch
+    {
+        FullscreenKind.Exclusive => behavior.HideOnFullscreen,
+        FullscreenKind.Borderless => behavior.HideOnBorderlessFullscreen,
+        _ => false,
+    };
+
+    /// <summary>Reservierung aufschieben: Ein Spiel, in dem die Leiste ausgeblendet wird, läuft noch.</summary>
+    private bool DefersReservation() =>
+        FullscreenWindowAlive() && HidesFor(_fullscreenKind, _settings.Current.Behavior);
+
+    /// <summary>
+    /// Leiste im Spiel sichtbar und Bildschirmbereich reserviert: Randlose Spiele ignorieren den Arbeitsbereich und
+    /// liegen sonst hinter der Leiste. Deshalb das Spielfenster selbst unter die Leiste legen
+    /// (Monitorhöhe minus Leiste, z. B. 1920×1080 mit 40 px Leiste → 1920×1040).
+    /// </summary>
+    private void FitGameBelowBar()
+    {
+        var state = _detector.State;
+        if (state.Kind != FullscreenKind.Borderless || _hiddenForFullscreen || _monitor is not { } monitor) return;
+        if (_window?.AppBar is not { IsReserving: true } appBar) return;
+        if (state.Window == _fitGivenUpWindow) return; // wehrt sich dauerhaft (z. B. Browser-Vollbild) – in Ruhe lassen
+
+        var b = monitor.Bounds;
+        var target = new RECT(b.Left, appBar.ReservedRect.Bottom, b.Right, b.Bottom);
+        if (!NativeMethods.GetWindowRect(state.Window, out var current)) return;
+        // Das Fenster deckt den Monitor nicht mehr ab → Windows hielte es nicht mehr für Vollbild und ließe die
+        // Taskleiste darüber stehen. Deshalb ausdrücklich als Vollbild melden.
+        MarkFullscreen(state.Window);
+        // Immer merken – auch wenn es schon passt (z. B. nach einem Neustart von Veyra) –, damit es beim Ende
+        // der Reservierung zuverlässig zurückbekommt, was ihm gehört.
+        bool otherWindow = state.Window != _fittedWindow;
+        _fittedWindow = state.Window;
+        if (current.Equals(target)) return;
+
+        // Setzt das Fenster seine Größe ständig zurück (3× in 10 Sekunden), nicht dagegen ankämpfen: Für dieses
+        // Fenster aufgeben, bis es das Vollbild verlässt. Es liegt dann wie ohne Reservierung unter der Leiste.
+        var now = Environment.TickCount64;
+        if (otherWindow || now - _fitStart > 10_000) (_fitStart, _fitCount) = (now, 0);
+        if (++_fitCount > 3)
+        {
+            _fitGivenUpWindow = state.Window;
+            _fittedWindow = IntPtr.Zero;
+            UnmarkFullscreen(); // deckt den Monitor selbst ab – Windows erkennt das Vollbild wieder allein
+            Log.Warning("Bar", $"{Name}: Fenster setzt seine Größe immer wieder zurück – Einpassen für dieses Fenster aufgegeben: " +
+                               WindowInspector.Describe(state.Window));
+            return;
+        }
+
+        bool moved = NativeMethods.SetWindowPos(state.Window, IntPtr.Zero, target.Left, target.Top, target.Width, target.Height,
+            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_NOOWNERZORDER);
+        Log.Info("Bar", $"{Name}: Spielfenster unter die Fläche gelegt {target} – " +
+                        $"{(moved ? "ok" : "fehlgeschlagen")}: {WindowInspector.Describe(state.Window)}");
+        // Solange das Fenster den Monitor noch abdeckte, hielt die Taskleiste es ohnehin für Vollbild und hat die
+        // Meldung verworfen. Nach dem Verkleinern prüft sie neu und käme wieder nach vorne → jetzt erneut melden.
+        if (moved) ScheduleRemark();
+    }
+
+    /// <summary>Eingepasstes Spielfenster in Kürze erneut als Vollbild melden (nachdem die Taskleiste die Größenänderung verarbeitet hat).</summary>
+    private void ScheduleRemark()
+    {
+        if (_markedWindow == IntPtr.Zero || _markedWindow != _fittedWindow) return;
+        _remarkTimer.Stop();
+        _remarkTimer.Start();
+    }
+
+    private void RemarkFittedWindow()
+    {
+        var hwnd = _markedWindow;
+        if (hwnd == IntPtr.Zero || hwnd != _fittedWindow || !NativeMethods.IsWindow(hwnd)) return;
+
+        // Höchstens 5× in 10 Sekunden, falls Taskleiste und Spiel sich gegenseitig immer wieder umstimmen.
+        var now = Environment.TickCount64;
+        if (now - _remarkStart > 10_000) (_remarkStart, _remarkCount) = (now, 0);
+        if (++_remarkCount > 5) return;
+
+        if (TaskbarList.MarkFullscreen(hwnd, true))
+            Log.Debug("Bar", $"{Name}: Spielfenster erneut als Vollbild gemeldet: {WindowInspector.Describe(hwnd)}");
+    }
+
+    /// <summary>Spielfenster bei der Windows-Taskleiste als Vollbild melden (höchstens eins gleichzeitig).</summary>
+    private void MarkFullscreen(IntPtr hwnd)
+    {
+        if (hwnd == _markedWindow) return;
+        UnmarkFullscreen();
+        if (TaskbarList.MarkFullscreen(hwnd, true))
+        {
+            _markedWindow = hwnd;
+            Log.Info("Bar", $"{Name}: Spielfenster bei der Taskleiste als Vollbild gemeldet: {WindowInspector.Describe(hwnd)}");
+        }
+    }
+
+    private void UnmarkFullscreen()
+    {
+        var hwnd = _markedWindow;
+        _markedWindow = IntPtr.Zero;
+        if (hwnd != IntPtr.Zero && NativeMethods.IsWindow(hwnd)) TaskbarList.MarkFullscreen(hwnd, false);
+    }
+
+    /// <summary>Ein von <see cref="FitGameBelowBar"/> verkleinertes Spielfenster wieder auf den ganzen Monitor legen.</summary>
+    private void RestoreFittedWindow()
+    {
+        _remarkTimer.Stop();
+        UnmarkFullscreen();
+        var hwnd = _fittedWindow;
+        _fittedWindow = IntPtr.Zero;
+        if (hwnd == IntPtr.Zero || _monitor is not { } monitor || !NativeMethods.IsWindow(hwnd)) return;
+        var b = monitor.Bounds;
+        // Nur zurückgeben, solange es noch so liegt, wie die Leiste es hingelegt hat (volle Breite, unten bündig,
+        // oben eingerückt) – ein inzwischen anders genutztes Fenster (z. B. Spiel im Fenstermodus) bleibt, wie es ist.
+        if (!NativeMethods.GetWindowRect(hwnd, out var r) ||
+            r.Left > b.Left || r.Right < b.Right || r.Bottom < b.Bottom || r.Top <= b.Top || r.Top > b.Top + b.Height / 4)
+            return;
+        NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, b.Left, b.Top, b.Width, b.Height,
+            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_NOOWNERZORDER);
+        Log.Info("Bar", $"{Name}: Spielfenster wieder monitorfüllend: {WindowInspector.Describe(hwnd)}");
+    }
+
+    /// <summary>Lebt das zuletzt erkannte Vollbildfenster noch (sichtbar, nicht minimiert)?</summary>
+    private bool FullscreenWindowAlive()
+    {
+        var hwnd = _fullscreenWindow;
+        if (hwnd == IntPtr.Zero) return false;
+        if (NativeMethods.IsWindow(hwnd) && NativeMethods.IsWindowVisible(hwnd) && !NativeMethods.IsIconic(hwnd)) return true;
+        _fullscreenWindow = IntPtr.Zero;
+        return false;
+    }
+
+    /// <summary>
+    /// Unsere Reservierung hat das Vollbildfenster eines Spiels unter die Leiste geschoben. Da die Leiste ausgeblendet
+    /// wird, Reservierung freigeben und das Fenster wieder auf den ganzen Monitor legen.
+    /// </summary>
+    private void RestoreSqueezedWindow(IntPtr hwnd)
+    {
+        if (_monitor is not { } monitor) return;
+        if (hwnd == _fittedWindow) _fittedWindow = IntPtr.Zero;
+        UnmarkFullscreen();
+        if (_window?.AppBar is { IsReserving: true } appBar)
+        {
+            appBar.Reset();
+            _detector.ReservedArea = null;
+            _reservationDeferred = true;
+        }
+        var b = monitor.Bounds;
+        bool moved = NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, b.Left, b.Top, b.Width, b.Height,
+            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_NOOWNERZORDER);
+        Log.Info("Bar", $"{Name}: Vollbildfenster war unter die Fläche geschoben – Reservierung freigegeben, " +
+                        $"Fenster {(moved ? "wieder monitorfüllend" : "konnte nicht verschoben werden")}: {WindowInspector.Describe(hwnd)}");
     }
 
     private void KeepOnTop()
@@ -479,11 +746,27 @@ public sealed class BarController : IDisposable
     /// <summary>
     /// Die Windows-Taskleiste holt sich beim Anklicken selbst nach vorne, und zwar erst nach dem Vordergrundwechsel.
     /// Eine Leiste im Vordergrund, die über der Taskleiste liegt, würde dann verschwinden → wieder darüber legen.
+    /// Dasselbe gilt für Spiele, die sich selbst als Topmost nach vorne holen, wenn die Leiste im Spiel sichtbar bleibt.
     /// </summary>
     private void StayAboveTaskbar()
     {
-        if (ShouldStayOnTop() && _window!.IsVisible && _window.IsBelowTaskbar()) _window.EnsureTopmost();
+        if (!ShouldStayOnTop() || !_window!.IsVisible) return;
+        var state = _detector.State;
+        if (_window.IsBelowTaskbar())
+        {
+            _window.EnsureTopmost();
+        }
+        else if (state.Kind != FullscreenKind.None && _window.IsBelow(state.Window))
+        {
+            // Holt sich das Spiel jedes Mal sofort wieder nach vorne, nicht endlos dagegen ankämpfen (max. 5× pro Sekunde).
+            var now = Environment.TickCount64;
+            if (now - _raiseWindowStart > 1000) (_raiseWindowStart, _raiseCount) = (now, 0);
+            if (++_raiseCount <= 5) _window.EnsureTopmost();
+        }
     }
+
+    private long _raiseWindowStart;
+    private int _raiseCount;
 
     /// <summary>Leiste sichtbar und im Vordergrund gewünscht (fixiert: "Immer im Vordergrund", dynamisch: Ebene Vordergrund).</summary>
     private bool ShouldStayOnTop()
@@ -494,12 +777,12 @@ public sealed class BarController : IDisposable
         if (bar is null) return false;
         return _window.IsDynamic
             ? bar.Appearance.Layer == WindowLayer.Topmost
-            : settings.Behavior.AlwaysOnTop;
+            : bar.Appearance.AlwaysOnTop != false;
     }
 
     /// <summary>Bildschirmbereich reservieren gibt es nur im fixierten Modus.</summary>
     private static bool ReservesScreenSpace(AppSettings settings, BarSettings bar) =>
-        !bar.Appearance.IsDynamic && settings.Behavior.ReserveScreenSpace;
+        !bar.Appearance.IsDynamic && bar.Appearance.ReserveScreenSpace != false;
 
     /// <summary>
     /// Dynamischer Modus: Der Benutzer hat die Leiste verschoben oder ihre Größe geändert → speichern.
@@ -539,10 +822,28 @@ public sealed class BarController : IDisposable
         _settings.Save(settings);
     }
 
+    /// <summary>Kontextmenü "Widget sperren/entsperren": nur dieses eine Widget.</summary>
+    private void ToggleWidgetLock(string widgetId)
+    {
+        var settings = _settings.Current.Clone();
+        var entry = Bar(settings)?.Widgets.FirstOrDefault(w => w.Id == widgetId);
+        if (entry is null) return;
+        entry.Locked = !entry.Locked;
+        Log.Info("Bar", $"{Name}: Widget {entry.Type} ({entry.Id}) {(entry.Locked ? "gesperrt" : "entsperrt")}");
+        _settings.Save(settings);
+    }
+
+    /// <summary>Name und Sperrzustand eines Widgets für das Kontextmenü; null = unbekannt.</summary>
+    private WidgetMenuInfo? DescribeWidget(string widgetId)
+    {
+        var entry = Bar(_settings.Current)?.Widgets.FirstOrDefault(w => w.Id == widgetId);
+        return entry is null ? null : new WidgetMenuInfo(SettingsUI.WidgetCatalog.For(entry.Type, entry.Volume).Name, entry.Locked);
+    }
+
     private void OnShellRestarted()
     {
         // Explorer hat alle AppBars vergessen → neu registrieren und (falls aktiv) Bereich erneut reservieren.
-        Log.Info("Bar", $"{Name}: Explorer wurde neu gestartet – Leiste wird neu registriert");
+        Log.Info("Bar", $"{Name}: Explorer wurde neu gestartet – Fläche wird neu registriert");
         _window?.AppBar?.Reset();
         ScheduleLayout(force: true);
     }

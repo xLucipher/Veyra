@@ -94,13 +94,16 @@
     <Border Background="{Binding PanelBackground}"
             CornerRadius="{Binding CornerRadius}"
             BorderBrush="{Binding BorderBrush}"
-            BorderThickness="{Binding BorderThickness}">
+            BorderThickness="{Binding BorderThickness}"
+            ContextMenuOpening="OnContextMenuOpening">
         <Border.ContextMenu>
             <ContextMenu Opened="OnContextMenuOpened" Closed="OnContextMenuClosed">
                 <MenuItem Header="Einstellungen" Tag="&#xE713;" Command="{Binding OpenSettingsCommand}" />
-                <MenuItem Header="{Binding LockMenuText}" Tag="{Binding LockMenuGlyph}" Command="{Binding ToggleLockCommand}"
-                          Visibility="{Binding DynamicMenuVisibility}" />
-                <MenuItem Header="Leiste neu laden" Tag="&#xE72C;" Command="{Binding ReloadCommand}" />
+                <MenuItem x:Name="LockMenuItem" Header="{Binding LockMenuText}" Tag="{Binding LockMenuGlyph}" Command="{Binding ToggleLockCommand}" />
+                <!-- Rechtsklick auf ein Widget: „Widget sperren“ wird beim Öffnen hinter „Position sperren“ eingefügt,
+                     die Profile hinter dieser Trennlinie (OnContextMenuOpening). -->
+                <Separator x:Name="ProfileSeparator" />
+                <MenuItem Header="Fläche neu laden" Tag="&#xE72C;" Command="{Binding ReloadCommand}" />
                 <Separator />
                 <MenuItem Header="Beenden" Tag="&#xE7E8;" Command="{Binding ExitCommand}" />
             </ContextMenu>

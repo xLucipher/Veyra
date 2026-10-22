@@ -6,9 +6,13 @@ using Veyra.Core;
 
 namespace Veyra.Bar;
 
+/// <summary>Widget unter dem Mauszeiger beim Öffnen des Kontextmenüs.</summary>
+public sealed record WidgetMenuInfo(string Name, bool Locked);
+
 /// <summary>ViewModel des Leistenfensters: Darstellung und Kontextmenü-Befehle.</summary>
 public sealed class TopBarViewModel : ObservableObject
 {
+    private readonly Func<string, WidgetMenuInfo?> _describeWidget;
     private Brush _windowBackground = Brushes.Black;
     private Brush _panelBackground = Brushes.Transparent;
     private CornerRadius _cornerRadius;
@@ -16,21 +20,44 @@ public sealed class TopBarViewModel : ObservableObject
     private Thickness _borderThickness;
     private Brush _foreground = Brushes.White;
     private FontFamily _fontFamily = new("Segoe UI");
-    private Visibility _dynamicMenuVisibility = Visibility.Collapsed;
     private bool _isLocked;
 
-    public TopBarViewModel(Action openSettings, Action reload, Action exit, Action toggleLock)
+    public TopBarViewModel(Action openSettings, Action reload, Action exit, Action toggleLock,
+        Action showProfiles, Action<string> switchProfile, Action<string> toggleWidgetLock, Func<string, WidgetMenuInfo?> describeWidget)
     {
         OpenSettingsCommand = new RelayCommand(openSettings);
         ReloadCommand = new RelayCommand(reload);
         ExitCommand = new RelayCommand(exit);
         ToggleLockCommand = new RelayCommand(toggleLock);
+        ShowProfilesCommand = new RelayCommand(showProfiles);
+        SwitchProfileCommand = new RelayCommand<string>(switchProfile);
+        ToggleWidgetLockCommand = new RelayCommand<string>(toggleWidgetLock);
+        _describeWidget = describeWidget;
     }
 
     public ICommand OpenSettingsCommand { get; }
     public ICommand ReloadCommand { get; }
     public ICommand ExitCommand { get; }
     public ICommand ToggleLockCommand { get; }
+    public ICommand ShowProfilesCommand { get; }
+    public ICommand SwitchProfileCommand { get; }
+
+    /// <summary>Parameter: Widget-ID.</summary>
+    public ICommand ToggleWidgetLockCommand { get; }
+
+    public WidgetMenuInfo? DescribeWidget(string widgetId) => _describeWidget(widgetId);
+
+    /// <summary>Profile für das Kontextmenü (Name, Id, aktiv) und Beschriftung der Profilauswahl samt Tastenkürzel.</summary>
+    public IReadOnlyList<(string Id, string Name, bool IsActive)> ProfileEntries { get; private set; } = [];
+    public string ProfilePickerText { get; private set; } = "Profilauswahl …";
+
+    public void ApplyProfiles(AppSettings settings)
+    {
+        ProfileEntries = settings.Profiles.Select(p => (p.Id, p.Name, p.Id == settings.ActiveProfileId)).ToList();
+        ProfilePickerText = Hotkey.TryParse(settings.ProfileHotkey, out var hotkey)
+            ? $"Profilauswahl …  ({hotkey.DisplayText})"
+            : "Profilauswahl …";
+    }
 
     /// <summary>Fixiert voll deckend: Fensterfarbe. Sonst transparent – das Panel zeichnet Hintergrund (mit Deckkraft) und Ecken.</summary>
     public Brush WindowBackground { get => _windowBackground; private set => SetProperty(ref _windowBackground, value); }
@@ -41,8 +68,6 @@ public sealed class TopBarViewModel : ObservableObject
     public Brush Foreground { get => _foreground; private set => SetProperty(ref _foreground, value); }
     public FontFamily FontFamily { get => _fontFamily; private set => SetProperty(ref _fontFamily, value); }
 
-    /// <summary>"Position sperren" erscheint nur im dynamischen Modus.</summary>
-    public Visibility DynamicMenuVisibility { get => _dynamicMenuVisibility; private set => SetProperty(ref _dynamicMenuVisibility, value); }
     public bool IsLocked
     {
         get => _isLocked;
@@ -69,7 +94,6 @@ public sealed class TopBarViewModel : ObservableObject
             PanelBackground = ColorUtil.ToBrush(a.BackgroundColor, Color.FromRgb(0x20, 0x21, 0x27), a.BackgroundOpacity);
             CornerRadius = new CornerRadius(a.CornerRadius);
             BorderThickness = new Thickness(a.BorderThickness);
-            DynamicMenuVisibility = Visibility.Visible;
         }
         else if (a.NeedsTransparency)
         {
@@ -79,7 +103,6 @@ public sealed class TopBarViewModel : ObservableObject
             PanelBackground = ColorUtil.ToBrush(a.BackgroundColor, Color.FromRgb(0x20, 0x21, 0x27), Math.Max(a.BackgroundOpacity, 1 / 255.0));
             CornerRadius = new CornerRadius(0);
             BorderThickness = new Thickness(0, 0, 0, a.BorderThickness);
-            DynamicMenuVisibility = Visibility.Collapsed;
         }
         else
         {
@@ -88,7 +111,6 @@ public sealed class TopBarViewModel : ObservableObject
             PanelBackground = Brushes.Transparent;
             CornerRadius = new CornerRadius(0);
             BorderThickness = new Thickness(0, 0, 0, a.BorderThickness);
-            DynamicMenuVisibility = Visibility.Collapsed;
         }
 
         BorderBrush = border;

@@ -1,0 +1,60 @@
+<w:FlyoutWindow x:Class="Veyra.Widgets.ClipboardHistory.ClipboardFlyout"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:w="clr-namespace:Veyra.Widgets"
+        Title="Zwischenablage"
+        ThemeMode="Dark"
+        Width="420"
+        Background="#2A2B32">
+    <Border Style="{StaticResource FlyoutFrame}">
+        <StackPanel>
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Command="{Binding ClearCommand}" ToolTip="Verlauf leeren (angeheftete Texte bleiben)" VerticalAlignment="Top" Padding="10,5">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE74D;" Style="{StaticResource FlyoutGlyph}" FontSize="12" Margin="0,0,8,0" />
+                        <TextBlock Text="Leeren" />
+                    </StackPanel>
+                </Button>
+                <StackPanel>
+                    <TextBlock Text="Zwischenablage" Style="{StaticResource FlyoutTitle}" />
+                    <TextBlock Text="{Binding Subtitle}" Style="{StaticResource FlyoutSubtitle}" />
+                </StackPanel>
+            </DockPanel>
+
+            <TextBox x:Name="SearchBox" Margin="0,12,0,0" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}"
+                     ToolTip="Verlauf durchsuchen – Pfeiltasten wählen, Enter übernimmt, Entf entfernt" />
+            <TextBlock Text="Nichts gefunden." Visibility="{Binding EmptyVisibility}" Style="{StaticResource FlyoutSubtitle}" Margin="2,8,0,0" />
+
+            <ScrollViewer x:Name="Scroller" MaxHeight="480" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+                <ItemsControl x:Name="List" ItemsSource="{Binding Rows}" Focusable="False">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{Binding Background}" CornerRadius="6" Margin="0,3" Cursor="Hand"
+                                    MouseLeftButtonUp="OnRowClick" ToolTip="{Binding Text}">
+                                <DockPanel Margin="12,8,6,8">
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="8,0,0,0">
+                                        <Button Command="{Binding TogglePinCommand}" ToolTip="{Binding PinToolTip}" Visibility="{Binding PinVisibility}"
+                                                Width="30" Height="28" Padding="0" Background="Transparent" BorderThickness="0">
+                                            <TextBlock Text="{Binding PinGlyph}" Style="{StaticResource FlyoutGlyph}" FontSize="12" />
+                                        </Button>
+                                        <Button Command="{Binding RemoveCommand}" ToolTip="{Binding RemoveToolTip}"
+                                                Width="30" Height="28" Padding="0" Background="Transparent" BorderThickness="0">
+                                            <TextBlock Text="&#xE711;" Style="{StaticResource FlyoutGlyph}" FontSize="11" />
+                                        </Button>
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Preview}" Visibility="{Binding TextVisibility}" FontSize="13" TextWrapping="Wrap"
+                                                   TextTrimming="CharacterEllipsis" MaxHeight="58" />
+                                        <Image Source="{Binding Image}" Visibility="{Binding ImageVisibility}" MaxHeight="90" MaxWidth="320"
+                                               HorizontalAlignment="Left" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                        <TextBlock Text="{Binding Meta}" FontSize="11.5" Opacity="0.55" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </StackPanel>
+    </Border>
+</w:FlyoutWindow>

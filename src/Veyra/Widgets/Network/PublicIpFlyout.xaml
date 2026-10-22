@@ -1,0 +1,48 @@
+<w:FlyoutWindow x:Class="Veyra.Widgets.Network.PublicIpFlyout"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:w="clr-namespace:Veyra.Widgets"
+        Title="Öffentliche IP-Adresse"
+        ThemeMode="Dark"
+        Width="420"
+        Background="#2A2B32">
+    <Border Style="{StaticResource FlyoutFrame}">
+        <StackPanel>
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Command="{Binding RefreshCommand}" ToolTip="Jetzt neu abfragen" Width="36" Height="32" Padding="0" VerticalAlignment="Top">
+                    <TextBlock Text="&#xE72C;" Style="{StaticResource FlyoutGlyph}" FontSize="13" />
+                </Button>
+                <StackPanel>
+                    <TextBlock Text="Öffentliche IP-Adresse" Style="{StaticResource FlyoutTitle}" />
+                    <TextBlock Text="{Binding StatusText}" Style="{StaticResource FlyoutSubtitle}" />
+                </StackPanel>
+            </DockPanel>
+
+            <Border Background="#14FFFFFF" CornerRadius="6" Padding="12,10" Margin="0,12,0,0">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Command="{Binding CopyV4Command}" IsEnabled="{Binding HasV4}" ToolTip="IPv4-Adresse kopieren"
+                            Width="36" Height="32" Padding="0" VerticalAlignment="Center" Margin="10,0,0,0">
+                        <TextBlock Text="&#xE8C8;" Style="{StaticResource FlyoutGlyph}" FontSize="13" />
+                    </Button>
+                    <StackPanel>
+                        <TextBlock Text="IPv4" FontSize="12" Opacity="0.6" />
+                        <TextBlock Text="{Binding IPv4Text}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+            <Border Background="#14FFFFFF" CornerRadius="6" Padding="12,10" Margin="0,8,0,0">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Command="{Binding CopyV6Command}" IsEnabled="{Binding HasV6}" ToolTip="IPv6-Adresse kopieren"
+                            Width="36" Height="32" Padding="0" VerticalAlignment="Center" Margin="10,0,0,0">
+                        <TextBlock Text="&#xE8C8;" Style="{StaticResource FlyoutGlyph}" FontSize="13" />
+                    </Button>
+                    <StackPanel>
+                        <TextBlock Text="IPv6" FontSize="12" Opacity="0.6" />
+                        <TextBlock Text="{Binding IPv6Text}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+            <TextBlock Text="{Binding CopiedText}" Style="{StaticResource FlyoutSubtitle}" Margin="2,8,0,0" />
+        </StackPanel>
+    </Border>
+</w:FlyoutWindow>

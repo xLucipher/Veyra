@@ -1,0 +1,64 @@
+<w:FlyoutWindow x:Class="Veyra.Widgets.Brightness.BrightnessFlyout"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:w="clr-namespace:Veyra.Widgets"
+        Title="Helligkeit"
+        ThemeMode="Dark"
+        Width="380"
+        Background="#2A2B32">
+    <Border Style="{StaticResource FlyoutFrame}">
+        <StackPanel>
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Command="{Binding RescanCommand}" ToolTip="Bildschirme neu suchen" Width="36" Height="32" Padding="0" VerticalAlignment="Top">
+                    <TextBlock Text="&#xE72C;" Style="{StaticResource FlyoutGlyph}" FontSize="13" />
+                </Button>
+                <TextBlock Text="Helligkeit" Style="{StaticResource FlyoutTitle}" VerticalAlignment="Center" />
+            </DockPanel>
+
+            <TextBlock Visibility="{Binding NoScreensVisibility}" Style="{StaticResource FlyoutSubtitle}" Margin="0,8,0,0"
+                       Text="Kein Bildschirm mit regelbarer Helligkeit gefunden. Externe Monitore brauchen DDC/CI (im Menü des Monitors einschalten); manche Monitore und Adapter (z. B. Docks) reichen es nicht durch." />
+
+            <ItemsControl ItemsSource="{Binding Rows}" Margin="0,6,0,0" Focusable="False">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Margin="0,6">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding PercentText}" FontSize="12.5" Opacity="0.7" Typography.NumeralAlignment="Tabular" />
+                                <TextBlock Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                            <DockPanel Margin="0,4,0,0">
+                                <TextBlock DockPanel.Dock="Left" Text="&#xE706;" Style="{StaticResource FlyoutGlyph}" FontSize="13" Opacity="0.6" Margin="0,0,10,0" />
+                                <Slider Minimum="0" Maximum="100" SmallChange="1" LargeChange="10" IsMoveToPointEnabled="True"
+                                        Value="{Binding Percent, Delay=120}" VerticalAlignment="Center" />
+                            </DockPanel>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Border Style="{StaticResource FlyoutDivider}" />
+
+            <!-- Nachtmodus -->
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Command="{Binding ToggleNightCommand}" Content="{Binding NightButtonText}" Padding="12,6"
+                        VerticalAlignment="Center" />
+                <TextBlock DockPanel.Dock="Left" Text="&#xE708;" Style="{StaticResource FlyoutGlyph}" FontSize="18" Margin="0,0,12,0" />
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Nachtmodus" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding NightStatus}" FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                </StackPanel>
+            </DockPanel>
+            <DockPanel Margin="0,10,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="Wärmer" FontSize="12" Opacity="0.6" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <TextBlock DockPanel.Dock="Right" Text="Neutral" FontSize="12" Opacity="0.6" VerticalAlignment="Center" Margin="10,0,0,0" />
+                <Slider Minimum="2700" Maximum="6000" SmallChange="100" LargeChange="500" TickFrequency="100" IsSnapToTickEnabled="True"
+                        IsMoveToPointEnabled="True" Value="{Binding NightTemperature, Delay=150}" VerticalAlignment="Center"
+                        ToolTip="Farbtemperatur des Nachtmodus" />
+            </DockPanel>
+            <TextBlock Margin="0,12,0,0" FontSize="11.5" Opacity="0.55" TextWrapping="Wrap">
+                <Run Text="Warmes Licht über die Farbtabelle der Grafikkarte – unabhängig vom" />
+                <Hyperlink Command="{Binding OpenWindowsNightLightCommand}" Foreground="#B4B7C2">Nachtlicht von Windows</Hyperlink><Run Text=". HDR-Monitore unterstützen das nicht." />
+            </TextBlock>
+        </StackPanel>
+    </Border>
+</w:FlyoutWindow>

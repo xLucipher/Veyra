@@ -44,14 +44,16 @@ public static class UpdateService
 {
     public const string Repository = "xLucipher/Veyra";
     public const string ReleasesPage = $"https://github.com/{Repository}/releases";
-    private const string GitHubLatestReleaseApi = $"https://api.github.com/repos/{Repository}/releases/latest";
+    // Liste statt nur "latest": Wer Versionen überspringt, soll die Neuerungen aller dazwischen sehen.
+    private const string GitHubReleasesApi = $"https://api.github.com/repos/{Repository}/releases?per_page=50";
 
     // Nur in Debug-Builds: lokaler Testserver statt GitHub (Release-Builds fragen ausschließlich GitHub).
-    private static string LatestReleaseApi =>
+    // Der Testserver darf ein einzelnes Release (Objekt) oder eine Liste liefern.
+    private static string ReleasesApi =>
 #if DEBUG
         Environment.GetEnvironmentVariable("VEYRA_UPDATE_API") ??
 #endif
-        GitHubLatestReleaseApi;
+        GitHubReleasesApi;
 
     private static readonly HttpClient Http = CreateClient();
 
@@ -70,7 +72,7 @@ public static class UpdateService
     {
         try
         {
-            using var response = await Http.GetAsync(LatestReleaseApi, cancel).ConfigureAwait(false);
+            using var response = await Http.GetAsync(ReleasesApi, cancel).ConfigureAwait(false);
             if (response.StatusCode == HttpStatusCode.NotFound)
                 return new UpdateCheckResult(UpdateCheckStatus.NoRelease, Message: "Auf GitHub ist noch keine Version veröffentlicht.");
             if (!response.IsSuccessStatusCode)
@@ -80,22 +82,30 @@ public static class UpdateService
             using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancel).ConfigureAwait(false);
             var root = json.RootElement;
 
-            string tag = root.GetProperty("tag_name").GetString() ?? "";
-            if (!TryParseVersion(tag, out var version))
-                return new UpdateCheckResult(UpdateCheckStatus.Failed, Message: $"Unbekanntes Versionsformat '{tag}'.");
+            // Veröffentlichte Releases (keine Entwürfe/Vorabversionen) mit gültiger Versionsnummer, neueste zuerst.
+            var releases = (root.ValueKind == JsonValueKind.Array ? root.EnumerateArray().ToList() : [root])
+                .Where(r => !IsTrue(r, "draft") && !IsTrue(r, "prerelease"))
+                .Select(r => (Release: r, Ok: TryParseVersion(r.GetProperty("tag_name").GetString() ?? "", out var v), Version: v))
+                .Where(r => r.Ok)
+                .OrderByDescending(r => r.Version)
+                .ToList();
+            if (releases.Count == 0)
+                return new UpdateCheckResult(UpdateCheckStatus.NoRelease, Message: "Auf GitHub ist noch keine Version veröffentlicht.");
 
+            var (latest, _, version) = releases[0];
+            string tag = latest.GetProperty("tag_name").GetString() ?? "";
             if (version <= CurrentVersion)
                 return new UpdateCheckResult(UpdateCheckStatus.UpToDate);
 
-            var asset = FindZipAsset(root);
+            var asset = FindZipAsset(latest);
             if (asset is null)
                 return new UpdateCheckResult(UpdateCheckStatus.Failed, Message: $"Release {tag} enthält kein passendes ZIP-Paket.");
 
-            string title = root.TryGetProperty("name", out var n) && n.GetString() is { Length: > 0 } name ? name : tag;
-            string notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
-            string html = root.TryGetProperty("html_url", out var h) ? h.GetString() ?? ReleasesPage : ReleasesPage;
+            string title = ReleaseTitle(latest, tag);
+            string html = latest.TryGetProperty("html_url", out var h) ? h.GetString() ?? ReleasesPage : ReleasesPage;
+            string notes = CombineNotes(releases.Where(r => r.Version > CurrentVersion).Select(r => r.Release).ToList());
 
-            var info = new UpdateInfo(version, tag, title, notes.Trim(), html,
+            var info = new UpdateInfo(version, tag, title, notes, html,
                 asset.Value.Name, asset.Value.Url, asset.Value.Size, asset.Value.Sha256);
             Log.Info("Update", $"Update verfügbar: {CurrentVersion} → {version} ({asset.Value.Name})");
             return new UpdateCheckResult(UpdateCheckStatus.UpdateAvailable, info);
@@ -239,6 +249,34 @@ public static class UpdateService
         return false;
     }
 
+    private static bool IsTrue(JsonElement release, string property) =>
+        release.TryGetProperty(property, out var p) && p.ValueKind == JsonValueKind.True;
+
+    private static string ReleaseTitle(JsonElement release, string tag) =>
+        release.TryGetProperty("name", out var n) && n.GetString() is { Length: > 0 } name ? name : tag;
+
+    /// <summary>
+    /// Neuerungen aller übersprungenen Versionen, neueste zuerst. Der Installationshinweis am Ende steht in jedem
+    /// Release – er bleibt nur beim neuesten stehen.
+    /// </summary>
+    private static string CombineNotes(IReadOnlyList<JsonElement> newerReleases)
+    {
+        var sections = new List<string>();
+        for (int i = 0; i < newerReleases.Count; i++)
+        {
+            var release = newerReleases[i];
+            string body = (release.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "").Replace("\r", "").Trim();
+            if (i > 0)
+                body = string.Join('\n', body.Split('\n').Where(l => !l.StartsWith("**Installation:**", StringComparison.Ordinal))).Trim();
+
+            // Releases ohne eigene Überschrift bekommen den Titel, damit die Versionen auseinanderzuhalten sind.
+            if (!body.StartsWith('#'))
+                body = $"## {ReleaseTitle(release, release.GetProperty("tag_name").GetString() ?? "")}" + (body.Length > 0 ? "\n\n" + body : "");
+            sections.Add(body);
+        }
+        return string.Join("\n\n", sections);
+    }
+
     private static (string Name, string Url, long Size, string? Sha256)? FindZipAsset(JsonElement release)
     {
         if (!release.TryGetProperty("assets", out var assets)) return null;
@@ -274,7 +312,7 @@ public static class UpdateService
         function Write-Log([string]$Text) { Add-Content -Path $LogFile -Value ("{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $Text) }
         Write-Log "Update gestartet: $Source -> $Target"
         try { Wait-Process -Id $ProcessId -Timeout 30 -ErrorAction Stop } catch { }
-        if (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue) { Write-Log "Leiste beendet sich nicht - Abbruch"; exit 1 }
+        if (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue) { Write-Log "Veyra beendet sich nicht - Abbruch"; exit 1 }
         Start-Sleep -Milliseconds 500
         $ok = $false
         for ($i = 0; $i -lt 5 -and -not $ok; $i++) {

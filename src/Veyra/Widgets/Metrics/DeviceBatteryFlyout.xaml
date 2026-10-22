@@ -1,0 +1,47 @@
+<w:FlyoutWindow x:Class="Veyra.Widgets.Metrics.DeviceBatteryFlyout"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:w="clr-namespace:Veyra.Widgets"
+        Title="Geräte-Akku"
+        ThemeMode="Dark"
+        Width="380"
+        Background="#2A2B32">
+    <Border Style="{StaticResource FlyoutFrame}">
+        <StackPanel>
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Command="{Binding RefreshCommand}" ToolTip="Jetzt neu lesen" Width="36" Height="32" Padding="0" VerticalAlignment="Top">
+                    <TextBlock Text="&#xE72C;" Style="{StaticResource FlyoutGlyph}" FontSize="13" />
+                </Button>
+                <StackPanel>
+                    <TextBlock Text="Geräte-Akku" Style="{StaticResource FlyoutTitle}" />
+                    <TextBlock Text="{Binding Sources}" Style="{StaticResource FlyoutSubtitle}" />
+                </StackPanel>
+            </DockPanel>
+
+            <TextBlock Visibility="{Binding EmptyVisibility}" Style="{StaticResource FlyoutSubtitle}" Margin="0,12,0,0"
+                       Text="Kein Gerät mit Akkustand gefunden. Bluetooth-Geräte müssen verbunden sein (Windows zeigt ihren Akku dann auch unter Einstellungen → Bluetooth). Razer: kabellose Mäuse und Tastaturen über Dongle oder Kabel sowie das BlackShark V2 Pro (Headset muss eingeschaltet sein)." />
+
+            <ItemsControl ItemsSource="{Binding Rows}" Margin="0,8,0,0" Focusable="False">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="#14FFFFFF" CornerRadius="6" Padding="12,9" Margin="0,4">
+                            <StackPanel>
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Left" Text="{Binding Glyph}" Style="{StaticResource FlyoutGlyph}" FontSize="18" Margin="0,0,12,0" />
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Percent}" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center"
+                                               Foreground="{Binding Brush}" Typography.NumeralAlignment="Tabular" Margin="10,0,0,0" />
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding Detail}" FontSize="12" Opacity="0.6" />
+                                    </StackPanel>
+                                </DockPanel>
+                                <ProgressBar Minimum="0" Maximum="1" Value="{Binding Fraction, Mode=OneWay}" Foreground="{Binding Brush}"
+                                             Height="3" Margin="30,8,0,0" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </Border>
+</w:FlyoutWindow>

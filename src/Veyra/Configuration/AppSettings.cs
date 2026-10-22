@@ -31,8 +31,24 @@ public sealed class AppSettings
 {
     public int Version { get; set; } = 4;
 
-    /// <summary>Alle Leisten. Es gibt immer mindestens eine.</summary>
+    /// <summary>Alle Leisten des aktiven Profils. Es gibt immer mindestens eine.</summary>
     public List<BarSettings> Bars { get; set; } = [];
+
+    /// <summary>
+    /// Layout-Profile (eigene Ansichten). Das aktive Profil speichert keine eigenen Leisten – seine Leisten sind
+    /// <see cref="Bars"/>. Beim Wechsel werden die Leisten getauscht (<see cref="ProfileOperations"/>).
+    /// </summary>
+    public List<LayoutProfile> Profiles { get; set; } = [];
+
+    public string ActiveProfileId { get; set; } = "";
+
+    /// <summary>Globales Tastenkürzel für die Profilauswahl (Overlay); null/leer = keins.</summary>
+    public string? ProfileHotkey { get; set; } = DefaultProfileHotkey;
+
+    public const string DefaultProfileHotkey = "Ctrl+Alt+P";
+
+    [JsonIgnore]
+    public LayoutProfile ActiveProfile => Profiles.First(p => p.Id == ActiveProfileId);
 
     public BehaviorSettings Behavior { get; set; } = new();
     public SystemSettings System { get; set; } = new();
@@ -81,6 +97,15 @@ public sealed class AppSettings
         System.MonitorSelection = null;
         Version = 4;
 
+        // Ältere Dateien: Vordergrund und Reservierung galten für alle Leisten – jede Leiste übernimmt den Wert.
+        foreach (var bar in Bars.Concat(Profiles?.Where(p => p?.Bars is not null).SelectMany(p => p.Bars) ?? []).Where(b => b?.Appearance is not null))
+        {
+            bar.Appearance.AlwaysOnTop ??= Behavior.AlwaysOnTop ?? true;
+            bar.Appearance.ReserveScreenSpace ??= Behavior.ReserveScreenSpace ?? true;
+        }
+        Behavior.AlwaysOnTop = null;
+        Behavior.ReserveScreenSpace = null;
+
         var legacyClock = Clock;
         Clock = null;
 
@@ -91,21 +116,66 @@ public sealed class AppSettings
         foreach (var duplicate in Bars.SelectMany(b => b.Widgets).GroupBy(w => w.Id).SelectMany(g => g.Skip(1)))
             duplicate.Id = WidgetEntry.NewId();
 
+        NormalizeProfiles();
+
         Behavior.Normalize();
         System.Normalize();
         Audio.Normalize();
         Updates.SkippedVersion = Updates.SkippedVersion?.Trim() ?? "";
     }
 
+    private void NormalizeProfiles()
+    {
+        Profiles = Profiles?.Where(p => p is not null).ToList() ?? [];
+        // Ältere Datei ohne Profile → die bisherigen Leisten werden zum Profil "Standard".
+        if (Profiles.Count == 0) Profiles.Add(new LayoutProfile { Id = ActiveProfileId, Name = "Standard" });
+
+        foreach (var duplicate in Profiles.GroupBy(p => p.Id).SelectMany(g => g.Skip(1)))
+            duplicate.Id = WidgetEntry.NewId();
+        for (int i = 0; i < Profiles.Count; i++)
+        {
+            var profile = Profiles[i];
+            if (string.IsNullOrWhiteSpace(profile.Id)) profile.Id = WidgetEntry.NewId();
+            profile.Name = string.IsNullOrWhiteSpace(profile.Name) ? $"Profil {i + 1}" : profile.Name.Trim();
+            profile.Bars = profile.Bars?.Where(b => b is not null).ToList() ?? [];
+        }
+
+        if (Profiles.All(p => p.Id != ActiveProfileId)) ActiveProfileId = Profiles[0].Id;
+
+        foreach (var profile in Profiles)
+        {
+            if (profile.Id == ActiveProfileId)
+            {
+                profile.Bars = []; // die Flächen des aktiven Profils stehen in Bars
+                continue;
+            }
+            if (profile.Bars.Count == 0) profile.Bars.Add(new BarSettings());
+            for (int i = 0; i < profile.Bars.Count; i++) profile.Bars[i].Normalize(i);
+        }
+
+        ProfileHotkey = Hotkey.TryParse(ProfileHotkey, out var hotkey) ? hotkey.ToString() : null;
+    }
+
     public const string MonitorDefault = "Primary";
 }
 
-/// <summary>Eine Leiste: eigenes Fenster mit Modus, Größe, Aussehen, Ebene, Monitor und eigenen Widgets.</summary>
+/// <summary>Ein Layout-Profil: eigene Ansicht aus Leisten samt Widgets, umschaltbar per Overlay oder Einstellungen.</summary>
+public sealed class LayoutProfile
+{
+    public string Id { get; set; } = WidgetEntry.NewId();
+
+    public string Name { get; set; } = "";
+
+    /// <summary>Leisten dieses Profils; beim aktiven Profil leer (dann gilt <see cref="AppSettings.Bars"/>).</summary>
+    public List<BarSettings> Bars { get; set; } = [];
+}
+
+/// <summary>Eine Fläche (im Code „Bar“): eigenes Fenster mit Modus, Größe, Aussehen, Ebene, Monitor und eigenen Widgets – fixiert als Leiste oder frei.</summary>
 public sealed class BarSettings
 {
     public string Id { get; set; } = WidgetEntry.NewId();
 
-    /// <summary>Anzeigename in den Einstellungen; leer = "Leiste N".</summary>
+    /// <summary>Anzeigename in den Einstellungen; leer = "Fläche N".</summary>
     public string Name { get; set; } = "";
 
     /// <summary>"Primary" oder ein Gerätename wie "\\.\DISPLAY2".</summary>
@@ -120,7 +190,10 @@ public sealed class BarSettings
     internal void Normalize(int index, ClockSettings? clockTemplate = null)
     {
         if (string.IsNullOrWhiteSpace(Id)) Id = WidgetEntry.NewId();
-        Name = string.IsNullOrWhiteSpace(Name) ? $"Leiste {index + 1}" : Name.Trim();
+        Name = string.IsNullOrWhiteSpace(Name) ? $"Fläche {index + 1}" : Name.Trim();
+        // Bis 1.3.3 hießen Flächen „Leisten“ – automatisch vergebene Namen mit umbenennen, eigene nicht.
+        if (Name.StartsWith("Leiste ", StringComparison.Ordinal) && int.TryParse(Name[7..], out int number))
+            Name = $"Fläche {number}";
         MonitorSelection = string.IsNullOrWhiteSpace(MonitorSelection) ? AppSettings.MonitorDefault : MonitorSelection.Trim();
         Appearance ??= new AppearanceSettings();
         Appearance.Normalize();
@@ -180,6 +253,63 @@ public enum WidgetType
 
     /// <summary>Upload- und Downloadgeschwindigkeit.</summary>
     NetworkTraffic,
+
+    /// <summary>Ein Bild aus einer Datei (PNG, JPG, GIF, BMP, ICO).</summary>
+    Image,
+
+    /// <summary>Freier Text als Notiz, direkt auf der Fläche bearbeitbar.</summary>
+    Note,
+
+    /// <summary>Gerade gespielte Medien (Titel, Interpret, Cover) mit Wiedergabesteuerung.</summary>
+    Media,
+
+    /// <summary>Akku-Ladestand.</summary>
+    Battery,
+
+    /// <summary>Belegter Speicher eines Laufwerks.</summary>
+    Drive,
+
+    /// <summary>Verbleibende Zeit bis zu einem Datum.</summary>
+    Countdown,
+
+    /// <summary>Trennlinie oder leerer Abstand – reine Gestaltung.</summary>
+    Separator,
+
+    /// <summary>Belegter Videospeicher der Grafikkarte.</summary>
+    GpuMemory,
+
+    /// <summary>Aktueller Takt der Grafikkarte in MHz.</summary>
+    GpuClock,
+
+    /// <summary>Lüfterdrehzahl der Grafikkarte.</summary>
+    GpuFan,
+
+    /// <summary>Freihand auf den Bildschirm zeichnen – das Gezeichnete liegt immer über allem.</summary>
+    Draw,
+
+    /// <summary>Verlauf der Zwischenablage: zuletzt kopierte Texte, Bilder und Dateien, Texte auch angeheftet.</summary>
+    Clipboard,
+
+    /// <summary>Uhrzeit in anderen Zeitzonen.</summary>
+    WorldClock,
+
+    /// <summary>Schnellstart: Programme, Ordner, Dateien und Webadressen als Symbole.</summary>
+    Launcher,
+
+    /// <summary>Aktuelles Wetter und Vorhersage (Open-Meteo, ohne Konto).</summary>
+    Weather,
+
+    /// <summary>Akkustand von Bluetooth-Geräten und kabellosen Razer-Geräten.</summary>
+    DeviceBattery,
+
+    /// <summary>Öffentliche IPv4- und IPv6-Adresse.</summary>
+    PublicIp,
+
+    /// <summary>Bildschirmhelligkeit (DDC/CI) und Nachtmodus (warmes Licht).</summary>
+    Brightness,
+
+    /// <summary>Bilder pro Sekunde des Spiels im Vordergrund (ETW, Gruppe „Leistungsprotokollbenutzer“).</summary>
+    Fps,
 }
 
 /// <summary>Eine per Tastenkürzel auslösbare Aktion eines Widgets.</summary>
@@ -195,6 +325,15 @@ public static class WidgetHotkeys
     public const string StartPause = "StartPause";
     public const string Reset = "Reset";
     public const string Lap = "Lap";
+    public const string PlayPause = "PlayPause";
+    public const string NextTrack = "NextTrack";
+    public const string PreviousTrack = "PreviousTrack";
+    public const string ToggleDraw = "ToggleDraw";
+    public const string ClearDrawing = "ClearDrawing";
+    public const string ShowClipboard = "ShowClipboard";
+    public const string BrightnessUp = "BrightnessUp";
+    public const string BrightnessDown = "BrightnessDown";
+    public const string ToggleNightMode = "ToggleNightMode";
 
     private static readonly IReadOnlyList<HotkeyAction> Volume =
     [
@@ -216,11 +355,40 @@ public static class WidgetHotkeys
         new(Reset, "Zurücksetzen", ""),
     ];
 
+    private static readonly IReadOnlyList<HotkeyAction> Media =
+    [
+        new(PlayPause, "Wiedergabe / Pause", "Für die Wiedergabe, die das Widget gerade zeigt."),
+        new(NextTrack, "Nächster Titel", ""),
+        new(PreviousTrack, "Vorheriger Titel", ""),
+    ];
+
+    private static readonly IReadOnlyList<HotkeyAction> Draw =
+    [
+        new(ToggleDraw, "Zeichnen ein/aus", "Startet das Zeichnen auf dem Monitor unter der Maus bzw. beendet es. Das Gezeichnete bleibt stehen."),
+        new(ClearDrawing, "Alles löschen", "Entfernt alles Gezeichnete auf allen Monitoren und beendet das Zeichnen."),
+    ];
+
+    private static readonly IReadOnlyList<HotkeyAction> Clipboard =
+    [
+        new(ShowClipboard, "Verlauf öffnen", "Öffnet den Verlauf am Widget – Pfeiltasten und Enter wählen, Esc schließt. Nur bei sichtbarer Fläche."),
+    ];
+
+    private static readonly IReadOnlyList<HotkeyAction> Brightness =
+    [
+        new(BrightnessUp, "Heller", "Alle Monitore um die Schrittweite des Mausrads; gedrückt halten wiederholt.", Repeat: true),
+        new(BrightnessDown, "Dunkler", "Alle Monitore um die Schrittweite des Mausrads; gedrückt halten wiederholt.", Repeat: true),
+        new(ToggleNightMode, "Nachtmodus ein/aus", "Warmes Licht auf allen Monitoren."),
+    ];
+
     public static IReadOnlyList<HotkeyAction> For(WidgetType type) => type switch
     {
         WidgetType.Volume => Volume,
         WidgetType.Timer => Timer,
         WidgetType.Stopwatch => Stopwatch,
+        WidgetType.Media => Media,
+        WidgetType.Draw => Draw,
+        WidgetType.Clipboard => Clipboard,
+        WidgetType.Brightness => Brightness,
         _ => [],
     };
 
@@ -261,6 +429,15 @@ public sealed class VolumeSettings
 
     /// <summary>Im Regler-Popup die Lautstärke je App (wie im Windows-Lautstärkemixer).</summary>
     public bool ShowApps { get; set; } = true;
+
+    /// <summary>Nur Mikrofon: stummgeschaltet deutlich rot hervorheben.</summary>
+    public bool HighlightMuted { get; set; } = true;
+
+    /// <summary>Beim Tastenkürzel kurz eine Anzeige oben auf dem Bildschirm einblenden – auch über Spielen.</summary>
+    public bool ShowOverlay { get; set; } = true;
+
+    /// <summary>Nur Mikrofon: kurzer Signalton beim Stummschalten (absteigend) und Einschalten (aufsteigend).</summary>
+    public bool MuteSound { get; set; } = true;
 
     public VolumeSettings Clone() => (VolumeSettings)MemberwiseClone();
 
@@ -393,6 +570,608 @@ public sealed class TrafficSettings
     }
 }
 
+/// <summary>Einstellungen des Bild-Widgets.</summary>
+public sealed class ImageSettings
+{
+    /// <summary>Vollständiger Pfad der Bilddatei; leer = noch kein Bild gewählt.</summary>
+    public string Path { get; set; } = "";
+
+    /// <summary>Höhe in px; die Breite folgt dem Seitenverhältnis, solange <see cref="Width"/> 0 ist.</summary>
+    public double Height { get; set; } = 32;
+
+    /// <summary>Breite in px; 0 = automatisch aus dem Seitenverhältnis.</summary>
+    public double Width { get; set; }
+
+    /// <summary>Deckkraft in Prozent.</summary>
+    public double Opacity { get; set; } = 100;
+
+    /// <summary>Abgerundete Ecken in px (0 = eckig).</summary>
+    public double CornerRadius { get; set; }
+
+    /// <summary>Optional: Datei, Ordner, Programm oder Webadresse, die ein Klick auf das Bild öffnet; leer = nichts.</summary>
+    public string ClickTarget { get; set; } = "";
+
+    public ImageSettings Clone() => (ImageSettings)MemberwiseClone();
+
+    internal void Normalize()
+    {
+        Path = Path?.Trim().Trim('"') ?? "";
+        ClickTarget = ClickTarget?.Trim() ?? "";
+        Height = double.IsFinite(Height) ? Math.Clamp(Math.Round(Height), 8, 1000) : 32;
+        Width = double.IsFinite(Width) ? Math.Clamp(Math.Round(Width), 0, 2000) : 0;
+        Opacity = double.IsFinite(Opacity) ? Math.Clamp(Math.Round(Opacity), 5, 100) : 100;
+        CornerRadius = double.IsFinite(CornerRadius) ? Math.Clamp(Math.Round(CornerRadius), 0, 500) : 0;
+    }
+}
+
+/// <summary>Einstellungen des Notiz-Widgets. Die Schriftfarbe steht wie bei den anderen Widgets in <see cref="WidgetEntry.LabelColor"/>.</summary>
+public sealed class NoteSettings
+{
+    public string Text { get; set; } = "";
+
+    public double FontSize { get; set; } = 13;
+
+    /// <summary>Leer = Schriftart der Fläche.</summary>
+    public string FontFamily { get; set; } = "";
+
+    public bool Bold { get; set; }
+
+    /// <summary>Breite, ab der umgebrochen wird (px); 0 = kein Umbruch, nur Zeilenumbrüche im Text.</summary>
+    public double MaxWidth { get; set; } = 260;
+
+    public System.Windows.TextAlignment Alignment { get; set; } = System.Windows.TextAlignment.Left;
+
+    /// <summary>Hintergrund wie ein Notizzettel; null = durchsichtig.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Background { get; set; }
+
+    /// <summary>Klick auf die Notiz öffnet ein Popup zum Bearbeiten.</summary>
+    public bool EditOnClick { get; set; } = true;
+
+    public const string DefaultBackground = "#33FFFFFF";
+
+    public NoteSettings Clone() => (NoteSettings)MemberwiseClone();
+
+    internal void Normalize()
+    {
+        Text = (Text ?? "").Replace("\r\n", "\n");
+        if (Text.Length > 4000) Text = Text[..4000];
+        FontSize = double.IsFinite(FontSize) ? Math.Clamp(Math.Round(FontSize, 1), 6, 200) : 13;
+        FontFamily = FontFamily?.Trim() ?? "";
+        MaxWidth = double.IsFinite(MaxWidth) ? Math.Clamp(Math.Round(MaxWidth), 0, 3000) : 260;
+        if (!Enum.IsDefined(Alignment) || Alignment == System.Windows.TextAlignment.Justify) Alignment = System.Windows.TextAlignment.Left;
+        Background = ColorUtil.IsValid(Background) ? Background!.Trim() : null;
+    }
+}
+
+/// <summary>Einstellungen des Medien-Widgets.</summary>
+public sealed class MediaSettings
+{
+    /// <summary>Albumcover bzw. Vorschaubild links neben dem Titel.</summary>
+    public bool ShowCover { get; set; } = true;
+
+    /// <summary>Interpret unter dem Titel.</summary>
+    public bool ShowArtist { get; set; } = true;
+
+    /// <summary>Schaltflächen Zurück, Wiedergabe/Pause, Weiter.</summary>
+    public bool ShowControls { get; set; } = true;
+
+    /// <summary>Breite des Textes in px (bei <see cref="FixedTextWidth"/> genau, sonst höchstens); längere Titel werden mit … gekürzt.</summary>
+    public double MaxTextWidth { get; set; } = 200;
+
+    /// <summary>
+    /// Text immer genau <see cref="MaxTextWidth"/> breit, Cover-Platz auch ohne Cover belegt: Die Schaltflächen stehen
+    /// dann bei jedem Titel an derselben Stelle (mehrere Titel überspringen, ohne der Maus hinterherzufahren).
+    /// </summary>
+    public bool FixedTextWidth { get; set; } = true;
+
+    /// <summary>Zu lange Titel und Interpreten laufen durch (wandernder Text) statt mit … zu enden.</summary>
+    public bool ScrollLongText { get; set; } = true;
+
+    /// <summary>Ohne laufende Wiedergabe ganz ausblenden statt „Keine Wiedergabe“ zu zeigen.</summary>
+    public bool HideWhenIdle { get; set; }
+
+    public MediaSettings Clone() => (MediaSettings)MemberwiseClone();
+
+    internal void Normalize() =>
+        MaxTextWidth = double.IsFinite(MaxTextWidth) ? Math.Clamp(Math.Round(MaxTextWidth), 60, 1000) : 200;
+}
+
+/// <summary>Anzeigeform eines Countdowns.</summary>
+public enum CountdownStyle
+{
+    /// <summary>"12 Tage" – unter einem Tag "5 Std." bzw. "40 Min.".</summary>
+    Days,
+
+    /// <summary>"12 T 4 Std."</summary>
+    DaysHours,
+
+    /// <summary>"12 T 04:31:10" mit Sekunden.</summary>
+    Clock,
+}
+
+/// <summary>Wiederholung eines Countdowns, z. B. für den täglichen oder wöchentlichen Reset in Spielen.</summary>
+public enum CountdownRepeat
+{
+    None,
+    Daily,
+    Weekly,
+    Monthly,
+    Yearly,
+}
+
+/// <summary>Einstellungen des Countdowns.</summary>
+public sealed class CountdownSettings
+{
+    public string Title { get; set; } = "Countdown";
+
+    /// <summary>Zieldatum und -uhrzeit (Ortszeit); bei Wiederholung der erste Termin.</summary>
+    public DateTime Target { get; set; } = DateTime.Today.AddDays(7);
+
+    /// <summary>
+    /// Wiederholung ab <see cref="Target"/>: täglich zur selben Uhrzeit, wöchentlich am selben Wochentag, monatlich am
+    /// selben Tag (in kürzeren Monaten am letzten), jährlich am selben Datum.
+    /// </summary>
+    public CountdownRepeat Repeat { get; set; } = CountdownRepeat.None;
+
+    /// <summary>
+    /// Nächster Termin nach <paramref name="after"/>; ohne Wiederholung immer <see cref="Target"/> (auch wenn vorbei).
+    /// Vor dem ersten Termin gilt dieser.
+    /// </summary>
+    public DateTime NextOccurrence(DateTime after)
+    {
+        if (Repeat == CountdownRepeat.None || after < Target) return Target;
+        var time = Target.TimeOfDay;
+        DateTime next;
+        switch (Repeat)
+        {
+            case CountdownRepeat.Daily:
+                next = after.Date + time;
+                if (next <= after) next = next.AddDays(1);
+                break;
+            case CountdownRepeat.Weekly:
+                next = after.Date.AddDays(((int)Target.DayOfWeek - (int)after.DayOfWeek + 7) % 7) + time;
+                if (next <= after) next = next.AddDays(7);
+                break;
+            case CountdownRepeat.Monthly:
+                next = DayInMonth(after.Year, after.Month, Target.Day) + time;
+                if (next <= after)
+                {
+                    var month = new DateTime(after.Year, after.Month, 1).AddMonths(1);
+                    next = DayInMonth(month.Year, month.Month, Target.Day) + time;
+                }
+                break;
+            default:
+                next = DayInMonth(after.Year, Target.Month, Target.Day) + time;
+                if (next <= after) next = DayInMonth(after.Year + 1, Target.Month, Target.Day) + time;
+                break;
+        }
+        return next;
+    }
+
+    /// <summary>Tag im Monat, in kürzeren Monaten der letzte (31. → 30. bzw. 28./29. Februar).</summary>
+    private static DateTime DayInMonth(int year, int month, int day) =>
+        new(year, month, Math.Min(day, DateTime.DaysInMonth(year, month)));
+
+    public CountdownStyle Style { get; set; } = CountdownStyle.Days;
+
+    /// <summary>Titel vor der Restzeit.</summary>
+    public bool ShowTitle { get; set; } = true;
+
+    /// <summary>Anzeige nach Erreichen des Ziels.</summary>
+    public string DoneText { get; set; } = "Geschafft!";
+
+    public CountdownSettings Clone() => (CountdownSettings)MemberwiseClone();
+
+    internal void Normalize()
+    {
+        Title = Title?.Trim() ?? "";
+        DoneText = DoneText?.Trim() ?? "";
+        if (!Enum.IsDefined(Style)) Style = CountdownStyle.Days;
+        if (!Enum.IsDefined(Repeat)) Repeat = CountdownRepeat.None;
+        Target = DateTime.SpecifyKind(Target, DateTimeKind.Unspecified);
+        if (Target.Year < 1900 || Target.Year > 9000) Target = DateTime.Today.AddDays(7);
+    }
+}
+
+public enum SeparatorStyle
+{
+    /// <summary>Durchgehende Linie.</summary>
+    Line,
+
+    /// <summary>Ein Punkt.</summary>
+    Dot,
+
+    /// <summary>Nur Abstand, nichts sichtbar.</summary>
+    Space,
+}
+
+/// <summary>Einstellungen des Zeichnen-Widgets. Werkzeug, Farbe und Stärke wählt man in der Werkzeugleiste.</summary>
+public sealed class DrawSettings
+{
+    /// <summary>Werkzeugleiste waagerecht (zwei Zeilen) statt senkrecht (zwei Spalten). Auch in der Werkzeugleiste umschaltbar.</summary>
+    public bool ToolbarHorizontal { get; set; }
+
+    /// <summary>Beim Beenden des Zeichnens alles löschen, statt das Gezeichnete stehen zu lassen.</summary>
+    public bool ClearOnExit { get; set; }
+
+    /// <summary>Neben dem Stift einen Papierkorb auf der Fläche zeigen, solange etwas gezeichnet ist.</summary>
+    public bool ShowClearButton { get; set; } = true;
+
+    public DrawSettings Clone() => (DrawSettings)MemberwiseClone();
+}
+
+/// <summary>
+/// Einstellungen des Zwischenablage-Verlaufs. Der Verlauf selbst liegt nur im Arbeitsspeicher; gespeichert werden
+/// nur die angehefteten Texte.
+/// </summary>
+public sealed class ClipboardSettings
+{
+    /// <summary>So viele Einträge behält der Verlauf (ohne angeheftete).</summary>
+    public int MaxItems { get; set; } = 25;
+
+    /// <summary>Angeheftete Texte – bleiben auch nach einem Neustart erhalten.</summary>
+    public List<string> Pinned { get; set; } = [];
+
+    /// <summary>Nach der Auswahl direkt in das vorher aktive Fenster einfügen (Strg + V); aus = nur kopieren.</summary>
+    public bool PasteOnSelect { get; set; } = true;
+
+    /// <summary>Kopierte Bilder in den Verlauf aufnehmen (höchstens <see cref="MaxImages"/>, nur im Arbeitsspeicher).</summary>
+    public bool KeepImages { get; set; } = true;
+
+    /// <summary>Anzahl der Einträge neben dem Symbol.</summary>
+    public bool ShowCount { get; set; }
+
+    public const int MaxImages = 5;
+    public const int MaxPinned = 50;
+    public const int MaxTextLength = 100_000;
+
+    public ClipboardSettings Clone()
+    {
+        var copy = (ClipboardSettings)MemberwiseClone();
+        copy.Pinned = [.. Pinned];
+        return copy;
+    }
+
+    internal void Normalize()
+    {
+        MaxItems = Math.Clamp(MaxItems, 5, 100);
+        Pinned = (Pinned ?? []).Where(p => !string.IsNullOrEmpty(p))
+            .Select(p => p.Length > MaxTextLength ? p[..MaxTextLength] : p)
+            .Distinct(StringComparer.Ordinal).Take(MaxPinned).ToList();
+    }
+}
+
+/// <summary>Eine Zeitzone der Weltuhr.</summary>
+public sealed class WorldClockZone
+{
+    public string Id { get; set; } = WidgetEntry.NewId();
+
+    /// <summary>Windows-Zeitzonen-ID, z. B. "Eastern Standard Time".</summary>
+    public string TimeZoneId { get; set; } = "";
+
+    /// <summary>Anzeigename, z. B. "New York"; leer = Name der Zeitzone.</summary>
+    public string Label { get; set; } = "";
+
+    public WorldClockZone Clone() => (WorldClockZone)MemberwiseClone();
+}
+
+/// <summary>Einstellungen der Weltuhr.</summary>
+public sealed class WorldClockSettings
+{
+    public List<WorldClockZone> Zones { get; set; } =
+    [
+        new() { TimeZoneId = "Eastern Standard Time", Label = "New York" },
+        new() { TimeZoneId = "Tokyo Standard Time", Label = "Tokio" },
+    ];
+
+    /// <summary>.NET-Zeitformat, z. B. "HH:mm" oder "h:mm tt".</summary>
+    public string TimeFormat { get; set; } = "HH:mm";
+
+    /// <summary>Namen der Orte vor der Uhrzeit.</summary>
+    public bool ShowLabels { get; set; } = true;
+
+    /// <summary>Alle Zeitzonen auf der Fläche; aus = nur die erste (alle stehen im Popup).</summary>
+    public bool ShowAllInBar { get; set; } = true;
+
+    /// <summary>„+1“ bzw. „−1“, wenn dort schon ein anderer Tag ist.</summary>
+    public bool ShowDayOffset { get; set; } = true;
+
+    public WorldClockSettings Clone()
+    {
+        var copy = (WorldClockSettings)MemberwiseClone();
+        copy.Zones = Zones.Select(z => z.Clone()).ToList();
+        return copy;
+    }
+
+    internal void Normalize()
+    {
+        Zones = (Zones ?? []).Where(z => z is not null && FindZone(z.TimeZoneId) is not null).Take(12).ToList();
+        foreach (var zone in Zones)
+        {
+            if (string.IsNullOrWhiteSpace(zone.Id)) zone.Id = WidgetEntry.NewId();
+            zone.TimeZoneId = zone.TimeZoneId.Trim();
+            zone.Label = zone.Label?.Trim() ?? "";
+        }
+        foreach (var duplicate in Zones.GroupBy(z => z.Id).SelectMany(g => g.Skip(1)))
+            duplicate.Id = WidgetEntry.NewId();
+        try
+        {
+            if (string.IsNullOrWhiteSpace(TimeFormat)) throw new FormatException();
+            _ = DateTime.Now.ToString(TimeFormat, CultureInfo.InvariantCulture);
+        }
+        catch (FormatException)
+        {
+            TimeFormat = "HH:mm";
+        }
+    }
+
+    /// <summary>Kurzname aus dem Anzeigenamen der Zeitzone: "(UTC+09:00) Osaka, Sapporo, Tokio" → "Osaka".</summary>
+    public static string DefaultLabel(TimeZoneInfo zone)
+    {
+        if (zone.Id == TimeZoneInfo.Utc.Id) return "UTC";
+        string name = zone.DisplayName;
+        int close = name.IndexOf(") ", StringComparison.Ordinal);
+        if (name.StartsWith("(UTC", StringComparison.Ordinal) && close > 0) name = name[(close + 2)..];
+        int comma = name.IndexOf(',');
+        return (comma > 0 ? name[..comma] : name).Trim();
+    }
+
+    /// <summary>Zeitzone zur Windows-ID; null, wenn es sie auf diesem System nicht gibt.</summary>
+    public static TimeZoneInfo? FindZone(string? id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(id.Trim());
+        }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            return null;
+        }
+    }
+}
+
+/// <summary>Ein Eintrag im Schnellstart.</summary>
+public sealed class LauncherItem
+{
+    public string Id { get; set; } = WidgetEntry.NewId();
+
+    /// <summary>Programm, Datei, Ordner oder Webadresse.</summary>
+    public string Path { get; set; } = "";
+
+    /// <summary>Nur Programme: Startparameter.</summary>
+    public string Arguments { get; set; } = "";
+
+    /// <summary>Anzeigename (Tooltip bzw. Beschriftung); leer = Dateiname.</summary>
+    public string Name { get; set; } = "";
+
+    public LauncherItem Clone() => (LauncherItem)MemberwiseClone();
+}
+
+/// <summary>Einstellungen des Schnellstarts.</summary>
+public sealed class LauncherSettings
+{
+    public List<LauncherItem> Items { get; set; } = [];
+
+    /// <summary>Namen neben den Symbolen.</summary>
+    public bool ShowNames { get; set; }
+
+    /// <summary>Symbolgröße in px.</summary>
+    public double IconSize { get; set; } = 20;
+
+    public LauncherSettings Clone()
+    {
+        var copy = (LauncherSettings)MemberwiseClone();
+        copy.Items = Items.Select(i => i.Clone()).ToList();
+        return copy;
+    }
+
+    internal void Normalize()
+    {
+        Items = (Items ?? []).Where(i => i is not null && !string.IsNullOrWhiteSpace(i.Path)).Take(40).ToList();
+        foreach (var item in Items)
+        {
+            if (string.IsNullOrWhiteSpace(item.Id)) item.Id = WidgetEntry.NewId();
+            item.Path = item.Path.Trim().Trim('"');
+            item.Arguments = item.Arguments?.Trim() ?? "";
+            item.Name = item.Name?.Trim() ?? "";
+        }
+        foreach (var duplicate in Items.GroupBy(i => i.Id).SelectMany(g => g.Skip(1)))
+            duplicate.Id = WidgetEntry.NewId();
+        IconSize = double.IsFinite(IconSize) ? Math.Clamp(Math.Round(IconSize), 12, 64) : 20;
+    }
+}
+
+public enum TemperatureUnit
+{
+    Celsius,
+    Fahrenheit,
+}
+
+public enum WindSpeedUnit
+{
+    KilometersPerHour,
+    MetersPerSecond,
+    MilesPerHour,
+}
+
+/// <summary>Einstellungen des Wetter-Widgets. Die Daten kommen von Open-Meteo (ohne Konto, ohne Schlüssel).</summary>
+public sealed class WeatherSettings
+{
+    /// <summary>Anzeigename des Orts, z. B. "Berlin, Deutschland".</summary>
+    public string LocationName { get; set; } = "";
+
+    /// <summary>Geografische Breite; null = noch kein Ort gewählt.</summary>
+    public double? Latitude { get; set; }
+
+    public double? Longitude { get; set; }
+
+    public TemperatureUnit Unit { get; set; } = TemperatureUnit.Celsius;
+
+    public WindSpeedUnit WindUnit { get; set; } = WindSpeedUnit.KilometersPerHour;
+
+    /// <summary>Abstand der Abfragen in Minuten.</summary>
+    public int IntervalMinutes { get; set; } = 30;
+
+    /// <summary>Wetterlage als Text neben der Temperatur, z. B. „Leicht bewölkt“.</summary>
+    public bool ShowCondition { get; set; }
+
+    /// <summary>Tageshöchst- und -tiefstwert neben der Temperatur.</summary>
+    public bool ShowHighLow { get; set; }
+
+    /// <summary>Ortsname neben der Temperatur.</summary>
+    public bool ShowLocation { get; set; }
+    [JsonIgnore]
+    public bool HasLocation => Latitude is not null && Longitude is not null;
+
+    public WeatherSettings Clone() => (WeatherSettings)MemberwiseClone();
+
+    internal void Normalize()
+    {
+        LocationName = LocationName?.Trim() ?? "";
+        if (Latitude is not { } lat || Longitude is not { } lon || !double.IsFinite(lat) || !double.IsFinite(lon) ||
+            Math.Abs(lat) > 90 || Math.Abs(lon) > 180)
+        {
+            Latitude = null;
+            Longitude = null;
+        }
+        if (!Enum.IsDefined(Unit)) Unit = TemperatureUnit.Celsius;
+        if (!Enum.IsDefined(WindUnit)) WindUnit = WindSpeedUnit.KilometersPerHour;
+        IntervalMinutes = Math.Clamp(IntervalMinutes, 10, 240);
+    }
+}
+
+/// <summary>Einstellungen des Geräte-Akku-Widgets. Welche Geräte es zeigt, steht in <see cref="WidgetEntry.Devices"/>.</summary>
+public sealed class DeviceBatterySettings
+{
+    /// <summary>Gerätenamen neben dem Ladestand.</summary>
+    public bool ShowNames { get; set; }
+
+    /// <summary>Bluetooth-Geräte, deren Akkustand Windows kennt (wie unter Einstellungen → Bluetooth).</summary>
+    public bool Bluetooth { get; set; } = true;
+
+    /// <summary>Kabellose Razer-Mäuse und -Tastaturen über Dongle oder Kabel (direkt am Gerät abgefragt).</summary>
+    public bool Razer { get; set; } = true;
+
+    /// <summary>Ab diesem Ladestand (Prozent) orange; ab der Hälfte davon rot.</summary>
+    public int WarnLevel { get; set; } = 20;
+
+    /// <summary>Windows-Benachrichtigung, sobald ein Gerät unter <see cref="WarnLevel"/> fällt.</summary>
+    public bool NotifyLow { get; set; } = true;
+
+    public DeviceBatterySettings Clone() => (DeviceBatterySettings)MemberwiseClone();
+
+    internal void Normalize() => WarnLevel = Math.Clamp(WarnLevel, 5, 50);
+}
+
+public enum IpVersionDisplay
+{
+    IPv4,
+    IPv6,
+    Both,
+}
+
+/// <summary>Einstellungen des Widgets für die öffentliche IP-Adresse.</summary>
+public sealed class PublicIpSettings
+{
+    public IpVersionDisplay Show { get; set; } = IpVersionDisplay.IPv4;
+
+    /// <summary>„IPv4“/„IPv6“ vor der Adresse.</summary>
+    public bool ShowLabel { get; set; } = true;
+
+    /// <summary>Adresse auf der Fläche verbergen (z. B. beim Streamen) – sichtbar erst im Popup.</summary>
+    public bool Mask { get; set; }
+
+    /// <summary>Abstand der Abfragen in Minuten; nach einer Netzwerkänderung wird sofort neu abgefragt.</summary>
+    public int IntervalMinutes { get; set; } = 15;
+
+    public PublicIpSettings Clone() => (PublicIpSettings)MemberwiseClone();
+
+    internal void Normalize()
+    {
+        if (!Enum.IsDefined(Show)) Show = IpVersionDisplay.IPv4;
+        IntervalMinutes = Math.Clamp(IntervalMinutes, 1, 1440);
+    }
+}
+
+/// <summary>Einstellungen des Helligkeit-/Nachtmodus-Widgets.</summary>
+public sealed class BrightnessSettings
+{
+    /// <summary>Helligkeitsänderung je Mausrad-Raste bzw. Tastendruck in Prozentpunkten.</summary>
+    public int WheelStep { get; set; } = 5;
+
+    public bool ShowPercent { get; set; } = true;
+
+    /// <summary>Farbtemperatur des Nachtmodus in Kelvin (6500 = neutral, kleiner = wärmer).</summary>
+    public int NightTemperature { get; set; } = 3400;
+
+    /// <summary>Nachtmodus ist eingeschaltet – wird beim Start wiederhergestellt.</summary>
+    public bool NightMode { get; set; }
+
+    /// <summary>Nachtmodus automatisch zwischen <see cref="NightFrom"/> und <see cref="NightTo"/>.</summary>
+    public bool NightSchedule { get; set; }
+
+    /// <summary>"HH:mm"</summary>
+    public string NightFrom { get; set; } = "21:00";
+
+    public string NightTo { get; set; } = "07:00";
+
+    public const int MinTemperature = 2700;
+    public const int NeutralTemperature = 6500;
+
+    public BrightnessSettings Clone() => (BrightnessSettings)MemberwiseClone();
+
+    internal void Normalize()
+    {
+        WheelStep = Math.Clamp(WheelStep, 1, 25);
+        NightTemperature = Math.Clamp(NightTemperature, MinTemperature, NeutralTemperature);
+        NightFrom = ParseTime(NightFrom) is { } from ? from.ToString(@"hh\:mm") : "21:00";
+        NightTo = ParseTime(NightTo) is { } to ? to.ToString(@"hh\:mm") : "07:00";
+    }
+
+    public static TimeSpan? ParseTime(string? text) =>
+        TimeSpan.TryParseExact(text?.Trim(), [@"h\:mm", @"hh\:mm"], CultureInfo.InvariantCulture, out var time) && time < TimeSpan.FromDays(1)
+            ? time
+            : null;
+
+    /// <summary>Liegt <paramref name="now"/> im Zeitplan (auch über Mitternacht, z. B. 21:00–07:00)?</summary>
+    public bool IsNightTime(DateTime now)
+    {
+        if (ParseTime(NightFrom) is not { } from || ParseTime(NightTo) is not { } to || from == to) return false;
+        var t = now.TimeOfDay;
+        return from < to ? t >= from && t < to : t >= from || t < to;
+    }
+}
+
+/// <summary>Einstellungen der Trennlinie. Die Farbe steht in <see cref="WidgetEntry.IconColor"/>.</summary>
+public sealed class SeparatorSettings
+{
+    public SeparatorStyle Style { get; set; } = SeparatorStyle.Line;
+
+    /// <summary>Senkrecht (zwischen Widgets nebeneinander) oder waagerecht (zwischen Widgets untereinander).</summary>
+    public bool Horizontal { get; set; }
+
+    /// <summary>Länge der Linie in px.</summary>
+    public double Length { get; set; } = 20;
+
+    /// <summary>Linienstärke bzw. Punktgröße in px.</summary>
+    public double Thickness { get; set; } = 1;
+
+    /// <summary>Freiraum auf jeder Seite in px.</summary>
+    public double Padding { get; set; } = 6;
+
+    public SeparatorSettings Clone() => (SeparatorSettings)MemberwiseClone();
+
+    internal void Normalize()
+    {
+        if (!Enum.IsDefined(Style)) Style = SeparatorStyle.Line;
+        Length = double.IsFinite(Length) ? Math.Clamp(Math.Round(Length), 1, 2000) : 20;
+        Thickness = double.IsFinite(Thickness) ? Math.Clamp(Math.Round(Thickness, 1), 0.5, 50) : 1;
+        Padding = double.IsFinite(Padding) ? Math.Clamp(Math.Round(Padding), 0, 500) : 6;
+    }
+}
+
 /// <summary>Darstellung eines Mess-Widgets (CPU, GPU, RAM, Temperatur).</summary>
 public enum MetricStyle
 {
@@ -417,10 +1196,13 @@ public sealed class MetricSettings
     /// <summary>Ab 80 % (Temperatur 80 °C) orange, ab 95 % (90 °C) rot.</summary>
     public bool WarnColors { get; set; } = true;
 
-    /// <summary>Nur RAM: belegte Gigabyte statt Prozent.</summary>
+    /// <summary>RAM und Videospeicher: belegte Gigabyte statt Prozent. Laufwerk: freie Gigabyte. Akku: Restlaufzeit.</summary>
     public bool ShowAmount { get; set; }
 
-    /// <summary>Nur GPU und Temperatur: Name der Grafikkarte; leer = automatisch (die mit dem meisten Videospeicher).</summary>
+    /// <summary>Nur Laufwerk: Stammverzeichnis wie "C:\".</summary>
+    public string Drive { get; set; } = "C:\\";
+
+    /// <summary>Nur GPU-Widgets: Name der Grafikkarte; leer = automatisch (die mit dem meisten Videospeicher).</summary>
     public string Gpu { get; set; } = "";
 
     public MetricSettings Clone() => (MetricSettings)MemberwiseClone();
@@ -429,6 +1211,14 @@ public sealed class MetricSettings
     {
         if (!Enum.IsDefined(Style)) Style = MetricStyle.Bar;
         Gpu = Gpu?.Trim() ?? "";
+        Drive = NormalizeDrive(Drive);
+    }
+
+    /// <summary>"c", "C:", "c:\" → "C:\"; Ungültiges → "C:\".</summary>
+    public static string NormalizeDrive(string? drive)
+    {
+        var letter = drive?.Trim().FirstOrDefault() ?? 'C';
+        return char.IsAsciiLetter(letter) ? $"{char.ToUpperInvariant(letter)}:\\" : "C:\\";
     }
 }
 
@@ -471,10 +1261,35 @@ public sealed class WidgetEntry
     /// </summary>
     public double? FreeX { get; set; }
 
+    /// <summary>
+    /// Freie Platzierung: linke Kante als Anteil der Leistenbreite (0..1). Löst <see cref="FreeX"/> ab, damit ein
+    /// breiter werdendes Widget nach rechts wächst. Alte Werte (Mitte) werden beim ersten Anzeigen umgerechnet.
+    /// </summary>
+    public double? FreeLeft { get; set; }
+
     public double? FreeY { get; set; }
+
+    /// <summary>
+    /// Freie Platzierung: Abstand der linken Kante zum linken Rand der Fläche in px (geräteunabhängig). Löst die
+    /// Anteile <see cref="FreeLeft"/>/<see cref="FreeY"/> ab, damit Widgets beim Ändern der Flächengröße stehen bleiben.
+    /// null = noch nicht übernommen (dann gelten die Anteile bzw. die normale Anordnung).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? FreeOffsetLeft { get; set; }
+
+    /// <summary>Freie Platzierung: Abstand der Oberkante zum oberen Rand der Fläche in px.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? FreeOffsetTop { get; set; }
 
     /// <summary>Größe des Widgets als Faktor (1 = normal, 2 = doppelt so groß). Wirkt auf Schrift, Symbole und Abstände.</summary>
     public double Scale { get; set; } = 1.0;
+
+    /// <summary>
+    /// Nur dieses Widget gegen Verschieben sperren (Kontextmenü der Fläche) – unabhängig von „Position sperren“ der
+    /// ganzen Fläche. Klicks auf das Widget funktionieren weiter.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Locked { get; set; }
 
     /// <summary>Nur Audio-Widgets: angezeigte Geräte (Endpunkt-IDs). Leer = alle aktiven Geräte.</summary>
     public List<string> Devices { get; set; } = [];
@@ -538,8 +1353,69 @@ public sealed class WidgetEntry
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public TrafficSettings? Traffic { get; set; }
 
+    /// <summary>Nur Bilder.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ImageSettings? Image { get; set; }
+
+    /// <summary>Nur Notizen.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NoteSettings? Note { get; set; }
+
+    /// <summary>Nur Medien-Widgets.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public MediaSettings? Media { get; set; }
+
+    /// <summary>Nur Countdowns.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CountdownSettings? Countdown { get; set; }
+
+    /// <summary>Nur Trennlinien.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public SeparatorSettings? Separator { get; set; }
+
+    /// <summary>Nur Zeichnen-Widgets.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DrawSettings? Draw { get; set; }
+
+    /// <summary>Nur Zwischenablage-Verlauf.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ClipboardSettings? Clipboard { get; set; }
+
+    /// <summary>Nur Weltuhren.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldClockSettings? WorldClock { get; set; }
+
+    /// <summary>Nur Schnellstart.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public LauncherSettings? Launcher { get; set; }
+
+    /// <summary>Nur Wetter.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WeatherSettings? Weather { get; set; }
+
+    /// <summary>Nur Geräte-Akku.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DeviceBatterySettings? DeviceBattery { get; set; }
+
+    /// <summary>Nur öffentliche IP-Adresse.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PublicIpSettings? PublicIp { get; set; }
+
+    /// <summary>Nur Helligkeit und Nachtmodus.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BrightnessSettings? Brightness { get; set; }
+
+    /// <summary>Nur FPS-Widgets.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public FpsSettings? Fps { get; set; }
+
     public static bool IsMetricType(WidgetType type) =>
-        type is WidgetType.Cpu or WidgetType.Gpu or WidgetType.Ram or WidgetType.GpuTemperature;
+        type is WidgetType.Cpu or WidgetType.Gpu or WidgetType.Ram or WidgetType.GpuTemperature
+            or WidgetType.Battery or WidgetType.Drive or WidgetType.GpuMemory or WidgetType.GpuClock or WidgetType.GpuFan;
+
+    /// <summary>Mess-Widgets, die eine Grafikkarte auswerten (mit Auswahl der Karte).</summary>
+    public static bool IsGpuType(WidgetType type) =>
+        type is WidgetType.Gpu or WidgetType.GpuTemperature or WidgetType.GpuMemory or WidgetType.GpuClock or WidgetType.GpuFan;
 
     [JsonIgnore]
     public bool IsMetric => IsMetricType(Type);
@@ -590,7 +1466,34 @@ public sealed class WidgetEntry
         Stopwatch = Type == WidgetType.Stopwatch ? Stopwatch ?? new StopwatchSettings() : null;
         Traffic = Type == WidgetType.NetworkTraffic ? Traffic ?? new TrafficSettings() : null;
         Traffic?.Normalize();
-        IconColor = ColorUtil.IsValid(IconColor) ? IconColor!.Trim() : null;
+        Image = Type == WidgetType.Image ? Image ?? new ImageSettings() : null;
+        Image?.Normalize();
+        Note = Type == WidgetType.Note ? Note ?? new NoteSettings() : null;
+        Note?.Normalize();
+        Media = Type == WidgetType.Media ? Media ?? new MediaSettings() : null;
+        Media?.Normalize();
+        Countdown = Type == WidgetType.Countdown ? Countdown ?? new CountdownSettings() : null;
+        Countdown?.Normalize();
+        Separator = Type == WidgetType.Separator ? Separator ?? new SeparatorSettings() : null;
+        Separator?.Normalize();
+        Draw = Type == WidgetType.Draw ? Draw ?? new DrawSettings() : null;
+        Clipboard = Type == WidgetType.Clipboard ? Clipboard ?? new ClipboardSettings() : null;
+        Clipboard?.Normalize();
+        WorldClock = Type == WidgetType.WorldClock ? WorldClock ?? new WorldClockSettings() : null;
+        WorldClock?.Normalize();
+        Launcher = Type == WidgetType.Launcher ? Launcher ?? new LauncherSettings() : null;
+        Launcher?.Normalize();
+        Weather = Type == WidgetType.Weather ? Weather ?? new WeatherSettings() : null;
+        Weather?.Normalize();
+        DeviceBattery = Type == WidgetType.DeviceBattery ? DeviceBattery ?? new DeviceBatterySettings() : null;
+        DeviceBattery?.Normalize();
+        PublicIp = Type == WidgetType.PublicIp ? PublicIp ?? new PublicIpSettings() : null;
+        PublicIp?.Normalize();
+        Brightness = Type == WidgetType.Brightness ? Brightness ?? new BrightnessSettings() : null;
+        Brightness?.Normalize();
+        Fps = Type == WidgetType.Fps ? Fps ?? new FpsSettings() : null;
+        Fps?.Normalize();
+        IconColor =ColorUtil.IsValid(IconColor) ? IconColor!.Trim() : null;
         LabelColor = ColorUtil.IsValid(LabelColor) ? LabelColor!.Trim() : null;
         IndicatorColor = ColorUtil.IsValid(IndicatorColor) ? IndicatorColor!.Trim() : null;
         Hotkey = Type is WidgetType.AudioOutputs or WidgetType.AudioInputs && Core.Hotkey.TryParse(Hotkey, out var hotkey)
@@ -609,15 +1512,25 @@ public sealed class WidgetEntry
             // Ältere Konfigurationen hatten nur einen Bereich – daraus eine Startposition ableiten.
             Position = Slot switch { WidgetSlot.Left => 0.08, WidgetSlot.Center => 0.65, _ => 0.9 };
         }
-        if (FreeX is not { } fx || !double.IsFinite(fx) || FreeY is not { } fy || !double.IsFinite(fy))
+        static double? Fraction(double? value) =>
+            value is { } v && double.IsFinite(v) ? Math.Clamp(Math.Round(v, 4), 0, 1) : null;
+        FreeX = Fraction(FreeX);
+        FreeLeft = Fraction(FreeLeft);
+        FreeY = Fraction(FreeY);
+        if (FreeY is null || (FreeX is null && FreeLeft is null))
         {
             FreeX = null;
+            FreeLeft = null;
             FreeY = null;
         }
-        else
+        static double? Offset(double? value) =>
+            value is { } v && double.IsFinite(v) ? Math.Clamp(Math.Round(v, 1), 0, 20000) : null;
+        FreeOffsetLeft = Offset(FreeOffsetLeft);
+        FreeOffsetTop = Offset(FreeOffsetTop);
+        if (FreeOffsetLeft is null || FreeOffsetTop is null)
         {
-            FreeX = Math.Clamp(Math.Round(fx, 4), 0, 1);
-            FreeY = Math.Clamp(Math.Round(fy, 4), 0, 1);
+            FreeOffsetLeft = null;
+            FreeOffsetTop = null;
         }
         Scale = double.IsFinite(Scale) && Scale > 0 ? Math.Clamp(Math.Round(Scale, 3), MinScale, MaxScale) : 1.0;
         Devices = (Devices ?? []).Where(d => !string.IsNullOrWhiteSpace(d))
@@ -676,6 +1589,12 @@ public sealed class AppearanceSettings
 {
     public BarMode Mode { get; set; } = BarMode.FullWidth;
 
+    /// <summary>Fixierter Modus: immer über allen Fenstern (dynamisch gilt <see cref="Layer"/>). null nur in älteren Dateien.</summary>
+    public bool? AlwaysOnTop { get; set; }
+
+    /// <summary>Fixierter Modus: Bereich als Windows-AppBar reservieren (maximierte Fenster beginnen darunter). null nur in älteren Dateien.</summary>
+    public bool? ReserveScreenSpace { get; set; }
+
     /// <summary>Fixierter Modus: Höhe in geräteunabhängigen Pixeln (bei 150 % Skalierung → 1,5 × physisch).</summary>
     public int Height { get; set; } = 48;
 
@@ -697,7 +1616,7 @@ public sealed class AppearanceSettings
     /// <summary>Dynamischer Modus: Vordergrund, normal oder hinter allen Fenstern.</summary>
     public WindowLayer Layer { get; set; } = WindowLayer.Topmost;
 
-    /// <summary>Dynamischer Modus: Verschieben und Größenänderung mit der Maus verhindern.</summary>
+    /// <summary>Widgets nicht mehr verschiebbar (jeder Modus); dynamisch auch Verschieben und Größenänderung der Leiste.</summary>
     public bool LockPosition { get; set; }
 
     /// <summary>
@@ -733,6 +1652,8 @@ public sealed class AppearanceSettings
     {
         var d = new AppearanceSettings();
         if (!Enum.IsDefined(Mode)) Mode = d.Mode;
+        AlwaysOnTop ??= true;
+        ReserveScreenSpace ??= true;
         if (!Enum.IsDefined(Layer)) Layer = d.Layer;
         Height = Math.Clamp(Height, 16, 200);
         Width = Math.Clamp(Width, 40, 10000);
@@ -755,10 +1676,13 @@ public sealed class AppearanceSettings
 
 public sealed class BehaviorSettings
 {
-    public bool AlwaysOnTop { get; set; } = true;
+    /// <summary>Nur zum Einlesen älterer Dateien: gilt seitdem je Leiste (<see cref="AppearanceSettings.AlwaysOnTop"/>).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? AlwaysOnTop { get; set; }
 
-    /// <summary>Reserviert den Bereich als Windows-AppBar (maximierte Fenster beginnen unterhalb der Leiste).</summary>
-    public bool ReserveScreenSpace { get; set; } = true;
+    /// <summary>Nur zum Einlesen älterer Dateien: gilt seitdem je Leiste (<see cref="AppearanceSettings.ReserveScreenSpace"/>).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? ReserveScreenSpace { get; set; }
 
     /// <summary>Automatisches Ein-/Ausblenden am oberen Rand (geplant, noch nicht implementiert).</summary>
     public bool AutoHide { get; set; }
@@ -933,4 +1857,24 @@ public sealed class SystemSettings
     internal void Normalize()
     {
     }
+}
+
+/// <summary>Einstellungen des FPS-Widgets.</summary>
+public sealed class FpsSettings
+{
+    /// <summary>Zeit je Bild in Millisekunden neben den FPS.</summary>
+    public bool ShowFrameTime { get; set; }
+
+    /// <summary>1-%-Low (FPS der langsamsten Bilder der letzten 10 Sekunden) neben den FPS.</summary>
+    public bool ShowOnePercentLow { get; set; }
+
+    /// <summary>Name des gemessenen Programms.</summary>
+    public bool ShowProcess { get; set; }
+
+    /// <summary>Unter diesen FPS rot, bis zum Doppelten orange; 0 = keine Warnfarben.</summary>
+    public int WarnBelow { get; set; } = 30;
+
+    public FpsSettings Clone() => (FpsSettings)MemberwiseClone();
+
+    internal void Normalize() => WarnBelow = Math.Clamp(WarnBelow, 0, 500);
 }

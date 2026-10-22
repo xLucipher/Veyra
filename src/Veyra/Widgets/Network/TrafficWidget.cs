@@ -82,13 +82,15 @@ public sealed class TrafficWidget : ObservableObject, IBarWidget
         _traffic = entry?.Traffic ?? new TrafficSettings();
 
         FontFamily = new FontFamily(bar.Appearance.FontFamily);
+        var barForeground = ColorUtil.ToBrush(bar.Appearance.ForegroundColor, Colors.White);
         Foreground = entry?.LabelColor is { } label
             ? ColorUtil.ToBrush(label, Colors.White)
-            : ColorUtil.ToBrush(bar.Appearance.ForegroundColor, Colors.White);
+            : barForeground;
         // Download = Akzentfarbe (wie Balken der Mess-Widgets), Upload = Symbolfarbe des Eintrags.
         DownBrush = ColorUtil.ToBrush(entry?.IndicatorColor ?? WidgetEntry.DefaultIndicatorColor, Colors.DeepSkyBlue);
         UpBrush = ColorUtil.ToBrush(entry?.IconColor ?? WidgetEntry.DefaultUploadColor, Colors.Orange);
-        TrackBrush = Units.Freeze(new SolidColorBrush(((SolidColorBrush)Foreground).Color) { Opacity = 0.14 });
+        // Hintergrundspur aus der Leistenfarbe, nicht aus der Wertfarbe – sonst färbt sie sich mit.
+        TrackBrush = Units.Freeze(new SolidColorBrush(((SolidColorBrush)barForeground).Color) { Opacity = 0.14 });
 
         Orientation = _traffic.Stacked ? Orientation.Vertical : Orientation.Horizontal;
         UpMargin = _traffic.Stacked ? new Thickness(0, -2, 0, 0) : new Thickness(10, 0, 0, 0);

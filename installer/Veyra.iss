@@ -97,6 +97,10 @@ german.TaskAutostart=Veyra beim Anmelden automatisch starten
 english.TaskAutostart=Start Veyra automatically when I sign in
 german.TaskDesktop=Verknüpfung auf dem Desktop erstellen
 english.TaskDesktop=Create a desktop shortcut
+german.TaskFps=FPS-Messung für das FPS-Widget erlauben (nimmt dein Konto in die Windows-Gruppe „Leistungsprotokollbenutzer“ auf – Windows fragt einmal nach Adminrechten, wirksam nach der nächsten Anmeldung)
+english.TaskFps=Allow FPS measurement for the FPS widget (adds your account to the Windows group "Performance Log Users" – Windows asks for administrator rights once, takes effect after you next sign in)
+german.GrantingFps=FPS-Messung wird erlaubt – bitte die Windows-Abfrage bestätigen …
+english.GrantingFps=Allowing FPS measurement – please confirm the Windows prompt …
 german.LaunchNow=Veyra jetzt starten
 english.LaunchNow=Launch Veyra now
 german.RemoveSettings=Sollen auch deine Veyra-Einstellungen und Protokolle gelöscht werden?%n%nWähle „Nein“, wenn du Veyra später erneut installieren und deine Einstellungen behalten möchtest.
@@ -125,6 +129,7 @@ german.UninstalledMost=%1 wurde entfernt.%n%nEinige Dateien konnten nicht gelös
 [Tasks]
 Name: "autostart"; Description: "{cm:TaskAutostart}"; GroupDescription: "{cm:TaskGroup}"
 Name: "desktopicon"; Description: "{cm:TaskDesktop}"; GroupDescription: "{cm:TaskGroup}"; Flags: unchecked
+Name: "fpsaccess"; Description: "{cm:TaskFps}"; GroupDescription: "{cm:TaskGroup}"; Flags: unchecked
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -138,6 +143,9 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\{#AppExe}"""; Tasks: autostart
 
 [Run]
+; Konto in „Leistungsprotokollbenutzer“ aufnehmen (S-1-5-32-559) – nur dieser Schritt läuft mit Adminrechten. Veyra.exe
+; erledigt das selbst und beendet sich gleich wieder; ist das Konto schon Mitglied, passiert nichts.
+Filename: "{app}\{#AppExe}"; Parameters: "--grant-fps ""{username}"""; Verb: "runas"; Flags: shellexec waituntilterminated runhidden; StatusMsg: "{cm:GrantingFps}"; Tasks: fpsaccess; Check: RuntimeReady
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchNow}"; Flags: nowait postinstall skipifsilent; Check: RuntimeReady
 
 [UninstallRun]

@@ -12,6 +12,21 @@ public enum SensorKind
     Ram,
     GpuUsage,
     GpuTemperature,
+    Battery,
+    Drive,
+    GpuMemory,
+    GpuClock,
+    GpuFan,
+}
+
+/// <summary>Akkustand laut Windows; <see cref="Percent"/> null = kein Akku (Desktop-PC).</summary>
+public sealed record BatteryReading(double? Percent, bool Charging, bool OnAc, bool Saver, TimeSpan? Remaining);
+
+/// <summary>Größe und freier Platz eines Laufwerks in Byte.</summary>
+public sealed record DriveReading(string Root, string Label, ulong Total, ulong Free)
+{
+    public ulong Used => Total - Free;
+    public double Usage => Total == 0 ? 0 : 100.0 * Used / Total;
 }
 
 /// <summary>Eine Grafikkarte laut DXGI. Die LUID ändert sich bei jedem Neustart, der Name nicht.</summary>
@@ -21,11 +36,16 @@ public sealed record GpuInfo(string Name, uint LuidLow, int LuidHigh, ulong Dedi
     public string CounterKey => $"luid_0x{LuidHigh:X8}_0x{LuidLow:X8}";
 }
 
-/// <summary>Messwerte einer Grafikkarte; null = nicht verfügbar.</summary>
-public sealed record GpuReading(double? Usage, double? Temperature, ulong DedicatedUsed);
+/// <summary>
+/// Messwerte einer Grafikkarte; null = nicht verfügbar bzw. nicht angefordert. Takt in MHz, Lüfter in U/min;
+/// die Höchstwerte dienen als Maßstab für Balken und Verlauf (null = unbekannt).
+/// </summary>
+public sealed record GpuReading(double? Usage, double? Temperature, ulong DedicatedUsed,
+    double? ClockMhz = null, double? MaxClockMhz = null, double? FanRpm = null, double? MaxFanRpm = null);
 
 /// <summary>
-/// Liest CPU, RAM, GPU-Auslastung und GPU-Temperatur einmal pro Sekunde – gemeinsam für alle Widgets.
+/// Liest CPU, RAM, GPU-Werte (Auslastung, Temperatur, Videospeicher, Takt, Lüfter) und Akku einmal pro Sekunde,
+/// Laufwerke höchstens alle 30 Sekunden – gemeinsam für alle Widgets.
 /// Gemessen wird nur, was gerade ein laufendes Widget angefordert hat (<see cref="Acquire"/>); ohne Anforderung
 /// steht der Timer, z. B. während die Leiste bei Vollbild ausgeblendet ist.
 /// </summary>
@@ -38,7 +58,10 @@ public sealed class SystemMonitor : IDisposable
     private IntPtr _gpuQuery, _engineCounter, _memoryCounter;
     private bool _gpuQueryFailed;
     private readonly Dictionary<string, uint> _kmtAdapters = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, uint> _maxFanRpm = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<GpuInfo>? _gpus;
+    private readonly Dictionary<string, (DriveReading? Reading, long Ticks)> _drives = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly long DriveInterval = TimeSpan.FromSeconds(30).Ticks;
 
     public SystemMonitor()
     {
@@ -58,6 +81,8 @@ public sealed class SystemMonitor : IDisposable
     public ulong RamTotal { get; private set; }
     public ulong RamUsed { get; private set; }
     public double? RamUsage => RamTotal == 0 ? null : 100.0 * RamUsed / RamTotal;
+
+    public BatteryReading Battery { get; private set; } = new(null, false, true, false, null);
 
     /// <summary>Messwerte je Grafikkarte (Schlüssel: <see cref="GpuInfo.CounterKey"/>).</summary>
     public IReadOnlyDictionary<string, GpuReading> Gpu { get; private set; } = new Dictionary<string, GpuReading>();
@@ -91,7 +116,8 @@ public sealed class SystemMonitor : IDisposable
         else _demand.Remove(kind);
 
         if (_demand.Count == 0) _timer.Stop();
-        if (!Needs(SensorKind.GpuUsage)) CloseGpuQuery();
+        if (!Needs(SensorKind.GpuUsage) && !Needs(SensorKind.GpuMemory)) CloseGpuQuery();
+        else if (!Needs(SensorKind.GpuUsage)) RemoveEngineCounter();
     }
 
     public void Dispose()
@@ -108,13 +134,18 @@ public sealed class SystemMonitor : IDisposable
 
     private bool Needs(SensorKind kind) => _demand.ContainsKey(kind);
 
+    private bool NeedsGpu =>
+        Needs(SensorKind.GpuUsage) || Needs(SensorKind.GpuTemperature) || Needs(SensorKind.GpuMemory) ||
+        Needs(SensorKind.GpuClock) || Needs(SensorKind.GpuFan);
+
     private void Sample()
     {
         try
         {
             if (Needs(SensorKind.Cpu)) SampleCpu();
             if (Needs(SensorKind.Ram)) SampleRam();
-            if (Needs(SensorKind.GpuUsage) || Needs(SensorKind.GpuTemperature)) SampleGpus();
+            if (NeedsGpu) SampleGpus();
+            if (Needs(SensorKind.Battery)) SampleBattery();
         }
         catch (Exception ex)
         {
@@ -143,6 +174,62 @@ public sealed class SystemMonitor : IDisposable
         RamUsed = status.ullTotalPhys - status.ullAvailPhys;
     }
 
+    // ---- Akku / Laufwerke -----------------------------------------------------------------
+
+    private void SampleBattery()
+    {
+        if (!GetSystemPowerStatus(out var status)) return;
+        bool noBattery = (status.BatteryFlag & 128) != 0 || status.BatteryFlag == 255 || status.BatteryLifePercent > 100;
+        Battery = new BatteryReading(
+            noBattery ? null : status.BatteryLifePercent,
+            Charging: !noBattery && (status.BatteryFlag & 8) != 0,
+            OnAc: status.ACLineStatus == 1,
+            Saver: (status.SystemStatusFlag & 1) != 0,
+            Remaining: status.BatteryLifeTime > 0 && status.ACLineStatus != 1 ? TimeSpan.FromSeconds(status.BatteryLifeTime) : null);
+    }
+
+    /// <summary>
+    /// Werte eines Laufwerks ("C:\"), höchstens alle 30 s neu gelesen. Nur lokale Laufwerke – Netzlaufwerke könnten
+    /// die Oberfläche blockieren. null = nicht vorhanden bzw. nicht lesbar.
+    /// </summary>
+    public DriveReading? GetDrive(string root)
+    {
+        long now = Environment.TickCount64 * TimeSpan.TicksPerMillisecond;
+        if (_drives.TryGetValue(root, out var cached) && now - cached.Ticks < DriveInterval) return cached.Reading;
+        var reading = ReadDrive(root);
+        _drives[root] = (reading, now);
+        return reading;
+    }
+
+    public static DriveReading? ReadDrive(string root)
+    {
+        if (GetDriveType(root) is not (DRIVE_FIXED or DRIVE_REMOVABLE)) return null;
+        // Kein Windows-Fehlerdialog bei einem leeren Kartenleser.
+        uint previous = SetErrorMode(SEM_FAILCRITICALERRORS);
+        try
+        {
+            if (!GetDiskFreeSpaceEx(root, out _, out ulong total, out ulong free) || total == 0) return null;
+            string label = "";
+            try { label = new System.IO.DriveInfo(root).VolumeLabel; } catch (Exception) { }
+            return new DriveReading(root, label, total, free);
+        }
+        finally
+        {
+            SetErrorMode(previous);
+        }
+    }
+
+    /// <summary>Alle lokalen Laufwerke (für die Auswahl in den Einstellungen).</summary>
+    public static List<DriveReading> EnumerateDrives()
+    {
+        var list = new List<DriveReading>();
+        foreach (var drive in System.IO.DriveInfo.GetDrives())
+        {
+            if (ReadDrive(drive.Name) is { } reading) list.Add(reading);
+        }
+        return list;
+    }
+
     private static string ReadCpuName()
     {
         try
@@ -162,55 +249,90 @@ public sealed class SystemMonitor : IDisposable
     {
         Dictionary<string, double> usage = [];
         Dictionary<string, ulong> memory = [];
+        bool needUsage = Needs(SensorKind.GpuUsage);
 
-        if (Needs(SensorKind.GpuUsage) && EnsureGpuQuery() && PdhCollectQueryData(_gpuQuery) == 0)
+        if ((needUsage || Needs(SensorKind.GpuMemory)) && EnsureGpuQuery(needUsage) && PdhCollectQueryData(_gpuQuery) == 0)
         {
-            // Wie der Task-Manager: je Grafikkarte die Auslastung jeder Engine-Art (3D, Copy, VideoDecode …)
-            // über alle Prozesse summieren; angezeigt wird die am stärksten ausgelastete Engine-Art.
-            var perType = new Dictionary<(string Luid, string Engine), double>();
-            foreach (var (instance, value) in ReadCounterArray(_engineCounter))
+            if (_engineCounter != IntPtr.Zero)
             {
-                if (ParseLuid(instance) is not { } luid) continue;
-                int engIndex = instance.IndexOf("engtype_", StringComparison.Ordinal);
-                string engine = engIndex >= 0 ? instance[(engIndex + 8)..] : "";
-                perType[(luid, engine)] = perType.GetValueOrDefault((luid, engine)) + value;
+                // Wie der Task-Manager: je Grafikkarte die Auslastung jeder Engine-Art (3D, Copy, VideoDecode …)
+                // über alle Prozesse summieren; angezeigt wird die am stärksten ausgelastete Engine-Art.
+                var perType = new Dictionary<(string Luid, string Engine), double>();
+                foreach (var (instance, value) in ReadCounterArray(_engineCounter))
+                {
+                    if (ParseLuid(instance) is not { } luid) continue;
+                    int engIndex = instance.IndexOf("engtype_", StringComparison.Ordinal);
+                    string engine = engIndex >= 0 ? instance[(engIndex + 8)..] : "";
+                    perType[(luid, engine)] = perType.GetValueOrDefault((luid, engine)) + value;
+                }
+                foreach (var group in perType.GroupBy(p => p.Key.Luid, StringComparer.OrdinalIgnoreCase))
+                    usage[group.Key] = Math.Clamp(group.Max(p => p.Value), 0, 100);
             }
-            foreach (var group in perType.GroupBy(p => p.Key.Luid, StringComparer.OrdinalIgnoreCase))
-                usage[group.Key] = Math.Clamp(group.Max(p => p.Value), 0, 100);
 
             foreach (var (instance, value) in ReadCounterArray(_memoryCounter))
                 if (ParseLuid(instance) is { } luid) memory[luid] = memory.GetValueOrDefault(luid) + (ulong)Math.Max(0, value);
         }
 
+        bool needPerf = Needs(SensorKind.GpuTemperature) || Needs(SensorKind.GpuFan);
         var readings = new Dictionary<string, GpuReading>(StringComparer.OrdinalIgnoreCase);
         foreach (var gpu in Gpus)
         {
             string key = gpu.CounterKey;
-            double? temperature = Needs(SensorKind.GpuTemperature) ? ReadTemperature(gpu) : null;
+            var perf = needPerf ? ReadPerfData(gpu) : null;
+            var node = Needs(SensorKind.GpuClock) ? ReadNodePerfData(gpu) : null;
+            // 0 = Treiber liefert keinen Wert (z. B. manche Prozessorgrafiken).
+            double? temperature = perf?.Temperature is > 0 and < 2000 ? perf.Value.Temperature / 10.0 : null;
+            // Lüfter: 0 U/min ist bei stehendem Lüfter (Zero-RPM) echt – aber nur, wenn die Karte überhaupt einen Lüfter meldet.
+            uint maxFan = Needs(SensorKind.GpuFan) ? MaxFanRpm(gpu) : 0;
+            double? fan = perf is { } p && (p.FanRPM > 0 || maxFan > 0) && p.FanRPM < 100_000 ? p.FanRPM : null;
             readings[key] = new GpuReading(
-                usage.TryGetValue(key, out var u) ? u : (Needs(SensorKind.GpuUsage) && _gpuQuery != IntPtr.Zero ? 0 : null),
+                usage.TryGetValue(key, out var u) ? u : (needUsage && _engineCounter != IntPtr.Zero ? 0 : null),
                 temperature,
-                memory.GetValueOrDefault(key));
+                memory.GetValueOrDefault(key),
+                ClockMhz: node is { Frequency: > 0 } n ? n.Frequency / 1_000_000.0 : null,
+                MaxClockMhz: node is { MaxFrequency: > 0 } m ? m.MaxFrequency / 1_000_000.0 : null,
+                FanRpm: fan,
+                MaxFanRpm: maxFan > 0 ? maxFan : null);
         }
         Gpu = readings;
     }
 
-    private bool EnsureGpuQuery()
+    /// <param name="withEngines">Auch die Auslastung je Engine messen (teurer: eine Instanz je Prozess und Engine).</param>
+    private bool EnsureGpuQuery(bool withEngines)
     {
-        if (_gpuQuery != IntPtr.Zero) return true;
         if (_gpuQueryFailed) return false;
-
-        if (PdhOpenQueryW(null, IntPtr.Zero, out _gpuQuery) != 0 ||
-            PdhAddEnglishCounterW(_gpuQuery, @"\GPU Engine(*)\Utilization Percentage", IntPtr.Zero, out _engineCounter) != 0 ||
-            PdhAddEnglishCounterW(_gpuQuery, @"\GPU Adapter Memory(*)\Dedicated Usage", IntPtr.Zero, out _memoryCounter) != 0)
+        if (_gpuQuery == IntPtr.Zero)
         {
-            Log.Warning("Sensors", "GPU-Leistungsindikatoren nicht verfügbar – GPU-Auslastung wird nicht angezeigt");
-            CloseGpuQuery();
-            _gpuQueryFailed = true;
-            return false;
+            if (PdhOpenQueryW(null, IntPtr.Zero, out _gpuQuery) != 0 ||
+                PdhAddEnglishCounterW(_gpuQuery, @"\GPU Adapter Memory(*)\Dedicated Usage", IntPtr.Zero, out _memoryCounter) != 0)
+            {
+                Log.Warning("Sensors", "GPU-Leistungsindikatoren nicht verfügbar – GPU-Auslastung und Videospeicher werden nicht angezeigt");
+                CloseGpuQuery();
+                _gpuQueryFailed = true;
+                return false;
+            }
         }
-        PdhCollectQueryData(_gpuQuery); // Ratenwerte brauchen zwei Messungen
+        if (withEngines && _engineCounter == IntPtr.Zero)
+        {
+            if (PdhAddEnglishCounterW(_gpuQuery, @"\GPU Engine(*)\Utilization Percentage", IntPtr.Zero, out _engineCounter) != 0)
+            {
+                Log.Warning("Sensors", "GPU-Leistungsindikator für die Auslastung nicht verfügbar");
+                _engineCounter = IntPtr.Zero;
+            }
+            else
+            {
+                PdhCollectQueryData(_gpuQuery); // Ratenwerte brauchen zwei Messungen
+            }
+        }
         return true;
+    }
+
+    /// <summary>Nur noch Videospeicher gefragt: den teuren Zähler je Engine abmelden.</summary>
+    private void RemoveEngineCounter()
+    {
+        if (_engineCounter == IntPtr.Zero) return;
+        PdhRemoveCounter(_engineCounter);
+        _engineCounter = IntPtr.Zero;
     }
 
     private void CloseGpuQuery()
@@ -255,7 +377,27 @@ public sealed class SystemMonitor : IDisposable
         return start >= 0 && instance.Length >= start + 26 ? instance.Substring(start, 26) : null;
     }
 
-    private double? ReadTemperature(GpuInfo gpu)
+    /// <summary>Temperatur und Lüfter (wie der Task-Manager); null = Karte bzw. Treiber liefert nichts.</summary>
+    private D3DKMT_ADAPTER_PERFDATA? ReadPerfData(GpuInfo gpu) =>
+        QueryAdapter(gpu, KMTQAITYPE_ADAPTERPERFDATA, new D3DKMT_ADAPTER_PERFDATA());
+
+    /// <summary>Takt der 3D-Engine (Node 0).</summary>
+    private D3DKMT_NODE_PERFDATA? ReadNodePerfData(GpuInfo gpu) =>
+        QueryAdapter(gpu, KMTQAITYPE_NODEPERFDATA, new D3DKMT_NODE_PERFDATA { NodeOrdinal = 0 });
+
+    /// <summary>Höchste Lüfterdrehzahl laut Treiber (ändert sich nicht → einmal je Karte gelesen); 0 = unbekannt.</summary>
+    private uint MaxFanRpm(GpuInfo gpu)
+    {
+        if (_maxFanRpm.TryGetValue(gpu.CounterKey, out uint max)) return max;
+        max = QueryAdapter(gpu, KMTQAITYPE_ADAPTERPERFDATA_CAPS, new D3DKMT_ADAPTER_PERFDATACAPS()) is { MaxFanRPM: > 0 and < 100_000 } caps
+            ? caps.MaxFanRPM
+            : 0;
+        _maxFanRpm[gpu.CounterKey] = max;
+        return max;
+    }
+
+    /// <summary>D3DKMTQueryAdapterInfo mit einer Struktur, deren Eingabefelder in <paramref name="input"/> stehen.</summary>
+    private T? QueryAdapter<T>(GpuInfo gpu, int type, T input) where T : struct
     {
         if (!_kmtAdapters.TryGetValue(gpu.CounterKey, out uint handle))
         {
@@ -265,21 +407,20 @@ public sealed class SystemMonitor : IDisposable
             _kmtAdapters[gpu.CounterKey] = handle;
         }
 
-        IntPtr buffer = Marshal.AllocHGlobal(Marshal.SizeOf<D3DKMT_ADAPTER_PERFDATA>());
+        int size = Marshal.SizeOf<T>();
+        IntPtr buffer = Marshal.AllocHGlobal(size);
         try
         {
-            Marshal.StructureToPtr(new D3DKMT_ADAPTER_PERFDATA(), buffer, false);
+            Marshal.StructureToPtr(input, buffer, false);
             var query = new D3DKMT_QUERYADAPTERINFO
             {
                 hAdapter = handle,
-                Type = KMTQAITYPE_ADAPTERPERFDATA,
+                Type = type,
                 pPrivateDriverData = buffer,
-                PrivateDriverDataSize = (uint)Marshal.SizeOf<D3DKMT_ADAPTER_PERFDATA>(),
+                PrivateDriverDataSize = (uint)size,
             };
             if (D3DKMTQueryAdapterInfo(ref query) != 0) return null;
-            var data = Marshal.PtrToStructure<D3DKMT_ADAPTER_PERFDATA>(buffer);
-            // 0 = Treiber liefert keinen Wert (z. B. manche Prozessorgrafiken).
-            return data.Temperature is > 0 and < 2000 ? data.Temperature / 10.0 : null;
+            return Marshal.PtrToStructure<T>(buffer);
         }
         finally
         {

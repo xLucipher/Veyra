@@ -1,0 +1,45 @@
+<w:FlyoutWindow x:Class="Veyra.Widgets.Clock.WorldClockFlyout"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:w="clr-namespace:Veyra.Widgets"
+        Title="Weltuhr"
+        ThemeMode="Dark"
+        Width="380"
+        Background="#2A2B32">
+    <Border Style="{StaticResource FlyoutFrame}">
+        <StackPanel>
+            <TextBlock Text="Weltuhr" Style="{StaticResource FlyoutTitle}" />
+            <TextBlock Text="{Binding LocalText}" Style="{StaticResource FlyoutSubtitle}" />
+            <TextBlock Text="Noch keine Zeitzonen – in den Einstellungen des Widgets hinzufügen." Margin="0,10,0,0">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource FlyoutSubtitle}">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Rows.Count}" Value="0">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+            <ItemsControl ItemsSource="{Binding Rows}" Margin="0,8,0,0" Focusable="False">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="#14FFFFFF" CornerRadius="6" Padding="12,8" Margin="0,4">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Left" Text="{Binding Glyph}" Style="{StaticResource FlyoutGlyph}" FontSize="18" Opacity="0.7"
+                                           Margin="0,0,12,0" />
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding Time}" FontSize="22" FontWeight="SemiBold" VerticalAlignment="Center"
+                                           Typography.NumeralAlignment="Tabular" Margin="12,0,0,0" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Label}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Detail}" FontSize="12" Opacity="0.6" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </Border>
+</w:FlyoutWindow>

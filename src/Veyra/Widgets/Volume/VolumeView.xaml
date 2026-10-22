@@ -8,16 +8,19 @@
              MouseWheel="OnWheel">
     <!-- Symbol nach Pegel · Prozentwert (Tabellenziffern, Mindestbreite) · optional Füllbalken -->
     <Border Style="{StaticResource WidgetHoverArea}" VerticalAlignment="Center">
-        <StackPanel Orientation="Horizontal">
-            <TextBlock Text="{Binding Glyph}" Foreground="{Binding IconBrush}" FontFamily="{StaticResource WidgetIconFont}" FontSize="16"
-                       VerticalAlignment="Center" />
-            <TextBlock Text="{Binding PercentText}" Visibility="{Binding PercentVisibility}" MinWidth="36"
-                       FontFamily="{Binding FontFamily}" FontSize="13" FontWeight="SemiBold" Foreground="{Binding Foreground}"
-                       VerticalAlignment="Center" Margin="7,0,0,0" Typography.NumeralAlignment="Tabular" />
-            <Border Visibility="{Binding BarVisibility}" Width="{Binding TrackWidth}" Height="5" CornerRadius="2.5"
-                    Background="{Binding TrackBrush}" VerticalAlignment="Center" Margin="6,0,0,0">
-                <Border Width="{Binding BarWidth}" HorizontalAlignment="Left" CornerRadius="2.5" Background="{Binding AccentBrush}" />
-            </Border>
-        </StackPanel>
+        <!-- Roter Hintergrund bei stummem Mikrofon; Padding und negativer Rand heben sich auf → kein Springen. -->
+        <Border Background="{Binding MutedBackground}" CornerRadius="5" Padding="5,2" Margin="-5,-2">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding Glyph}" Foreground="{Binding IconBrush}" FontFamily="{StaticResource WidgetIconFont}" FontSize="16"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="{Binding PercentText}" Visibility="{Binding PercentVisibility}" MinWidth="36"
+                           FontFamily="{Binding FontFamily}" FontSize="13" FontWeight="SemiBold" Foreground="{Binding Foreground}"
+                           VerticalAlignment="Center" Margin="7,0,0,0" Typography.NumeralAlignment="Tabular" />
+                <Border Visibility="{Binding BarVisibility}" Width="{Binding TrackWidth}" Height="5" CornerRadius="2.5"
+                        Background="{Binding TrackBrush}" VerticalAlignment="Center" Margin="6,0,0,0">
+                    <Border Width="{Binding BarWidth}" HorizontalAlignment="Left" CornerRadius="2.5" Background="{Binding AccentBrush}" />
+                </Border>
+            </StackPanel>
+        </Border>
     </Border>
 </UserControl>

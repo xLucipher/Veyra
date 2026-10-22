@@ -133,8 +133,8 @@ public sealed class SettingsService : IDisposable
     private void PersistGeneratedIds(string text, AppSettings settings)
     {
         bool Known(string id) => text.Contains($"\"{id}\"", StringComparison.Ordinal);
-        if (settings.Bars.All(b => Known(b.Id) && b.Widgets.All(w => Known(w.Id)))) return;
-        Log.Info("Settings", "Neue IDs vergeben bzw. Leisten übernommen und gespeichert");
+        if (settings.Bars.All(b => Known(b.Id) && b.Widgets.All(w => Known(w.Id))) && settings.Profiles.All(p => Known(p.Id))) return;
+        Log.Info("Settings", "Neue IDs vergeben bzw. Flächen übernommen und gespeichert");
         Write(settings);
     }
 
@@ -231,6 +231,7 @@ public sealed class SettingsService : IDisposable
         try
         {
             Directory.CreateDirectory(DirectoryPath);
+            BackupCurrentFile(json);
             File.WriteAllText(tempPath, json, new UTF8Encoding(false));
             File.Move(tempPath, FilePath, overwrite: true);
             _lastKnownContent = json;
@@ -238,6 +239,39 @@ public sealed class SettingsService : IDisposable
         catch (Exception ex)
         {
             Log.Error("Settings", "Konfiguration konnte nicht gespeichert werden", ex);
+        }
+    }
+
+    /// <summary>Ordner der automatischen Sicherungen (je Speichervorgang die vorherige Fassung).</summary>
+    public static readonly string BackupDirectoryPath = Path.Combine(DirectoryPath, "backups");
+
+    private const int MaxBackups = 10;
+
+    /// <summary>
+    /// Sichert die bisherige settings.json, bevor sie überschrieben wird – nur wenn sich der Inhalt wirklich ändert.
+    /// Behalten werden die letzten <see cref="MaxBackups"/> Fassungen. Fehler beim Sichern verhindern das Speichern nie.
+    /// </summary>
+    private void BackupCurrentFile(string newContent)
+    {
+        try
+        {
+            if (!File.Exists(FilePath)) return;
+            string current = File.ReadAllText(FilePath, Encoding.UTF8);
+            if (current == newContent || string.IsNullOrWhiteSpace(current)) return;
+
+            Directory.CreateDirectory(BackupDirectoryPath);
+            // Zeitstempel im Namen: sortiert chronologisch und zeigt, von wann die Fassung stammt.
+            string backup = Path.Combine(BackupDirectoryPath, $"settings-{DateTime.Now:yyyyMMdd-HHmmss-fff}.json");
+            File.WriteAllText(backup, current, new UTF8Encoding(false));
+
+            foreach (var old in Directory.GetFiles(BackupDirectoryPath, "settings-*.json")
+                         .OrderByDescending(Path.GetFileName, StringComparer.Ordinal)
+                         .Skip(MaxBackups))
+                File.Delete(old);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning("Settings", $"Sicherung der bisherigen Konfiguration fehlgeschlagen: {ex.Message}");
         }
     }
 

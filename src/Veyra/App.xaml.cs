@@ -26,6 +26,14 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Erhöhter Hilfsschritt für die FPS-Messung (Button bzw. Installer): nur Konto aufnehmen, nichts sonst starten.
+        int grant = Array.FindIndex(e.Args, a => a.Equals(Gaming.FpsPermission.GrantArgument, StringComparison.OrdinalIgnoreCase));
+        if (grant >= 0)
+        {
+            Shutdown(Gaming.FpsPermission.GrantFromCommandLine(e.Args.ElementAtOrDefault(grant + 1)));
+            return;
+        }
+
         bool exitRequested = e.Args.Any(a => a.Equals("--exit", StringComparison.OrdinalIgnoreCase));
         _singleInstance = new SingleInstance();
         if (exitRequested || !_singleInstance.TryAcquire())
@@ -59,7 +67,7 @@ public partial class App : Application
         if (_settings.Current.System.UseSoftwareRendering)
             RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
 
-        _bar = new BarManager(_settings, ShowSettings, ExitApplication);
+        _bar = new BarManager(_settings, ShowSettings, ShowProfileSettings, ExitApplication);
         _bar.Start();
 
         // Update-Prüfung über GitHub Releases – nie während eines Vollbildspiels.
@@ -85,15 +93,23 @@ public partial class App : Application
         if (_settingsWindow is null)
         {
             _settingsWindow = new SettingsWindow(new SettingsViewModel(_settings, ExitApplication,
-                () => _updates?.CheckNowAsync() ?? Task.FromResult("Update-Dienst nicht verfügbar.")));
+                () => _updates?.CheckNowAsync() ?? Task.FromResult("Update-Dienst nicht verfügbar."),
+                () => _bar?.Profiles.ShowOverlay()));
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
-            _settingsWindow.Show(); // nicht modal – die Leiste läuft unabhängig weiter
+            _settingsWindow.Show(); // nicht modal – die Fläche läuft unabhängig weiter
         }
 
         if (barId is not null) _settingsWindow.SelectBar(barId);
         if (_settingsWindow.WindowState == WindowState.Minimized)
             _settingsWindow.WindowState = WindowState.Normal;
         _settingsWindow.Activate();
+    }
+
+    /// <summary>Einstellungen auf der Seite „Profile“ öffnen (Profilauswahl → „Profile verwalten …“).</summary>
+    private void ShowProfileSettings()
+    {
+        ShowSettings(null);
+        _settingsWindow?.ShowProfilesPage();
     }
 
     private void ExitApplication()

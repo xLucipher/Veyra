@@ -1,14 +1,15 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using Veyra.Core;
 
 namespace Veyra.SettingsUI;
 
 public sealed record ColorPreset(string Name, string? Hex);
 
 /// <summary>
-/// Farbauswahl: Farbfeld (öffnet den Farbkreis), Hex-Feld für exakte Werte und Dropdown mit
-/// abgestimmten Vorlagen. Alle drei bearbeiten denselben Wert.
+/// Farbauswahl: Farbfeld (öffnet den Farbkreis), Pipette (Farbe vom Bildschirm), Hex-Feld für exakte
+/// Werte und Dropdown mit abgestimmten Vorlagen. Alle bearbeiten denselben Wert.
 /// </summary>
 public partial class ColorField : UserControl
 {
@@ -84,6 +85,29 @@ public partial class ColorField : UserControl
     }
 
     private void OnDoneClick(object sender, RoutedEventArgs e) => WheelPopup.IsOpen = false;
+
+    private async void OnEyedropperClick(object sender, RoutedEventArgs e)
+    {
+        bool reopen = WheelPopup.IsOpen;
+        if (reopen)
+        {
+            WheelPopup.IsOpen = false;
+            await Task.Delay(250); // Ausblenden abwarten, sonst landet der Farbkreis im Standbild
+        }
+
+        ScreenColorPicker.Pick(color =>
+        {
+            if (color is { } picked)
+            {
+                // Transparenz eines bisherigen #AARRGGBB-Werts beibehalten.
+                byte alpha = ColorUtil.TryParse(Value, out var current) ? current.A : (byte)255;
+                Value = alpha == 255
+                    ? $"#{picked.R:X2}{picked.G:X2}{picked.B:X2}"
+                    : $"#{alpha:X2}{picked.R:X2}{picked.G:X2}{picked.B:X2}";
+            }
+            if (reopen) WheelPopup.IsOpen = true;
+        });
+    }
 
     private void OnPresetSelected(object sender, SelectionChangedEventArgs e)
     {

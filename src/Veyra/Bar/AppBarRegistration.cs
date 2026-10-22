@@ -31,6 +31,9 @@ internal sealed class AppBarRegistration
 
     public bool IsReserving => IsRegistered && _hasReservation;
 
+    /// <summary>Zuletzt reservierter Bereich (nur gültig, solange <see cref="IsReserving"/>).</summary>
+    public RECT ReservedRect => _reservedRect;
+
     public void Register()
     {
         if (IsRegistered) return;

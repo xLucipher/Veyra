@@ -1,0 +1,117 @@
+<Window x:Class="Veyra.Profiles.ProfileOverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Veyra – Profil wechseln"
+        ThemeMode="Dark"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True"
+        Foreground="White" FontFamily="Segoe UI Variable Text, Segoe UI"
+        UseLayoutRounding="True">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    </Window.Resources>
+
+    <!-- Abgedunkelter Hintergrund wie bei einem Spiel-Overlay; ein Klick darauf schließt. -->
+    <Grid x:Name="Root" Background="#D90C0D12" MouseLeftButtonDown="OnBackdropClick" Opacity="0">
+        <Grid.Triggers>
+            <EventTrigger RoutedEvent="Loaded">
+                <BeginStoryboard>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.12" />
+                    </Storyboard>
+                </BeginStoryboard>
+            </EventTrigger>
+        </Grid.Triggers>
+
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="1240">
+            <TextBlock Text="&#xE8F1;" FontFamily="{StaticResource WidgetIconFont}" FontSize="30" Opacity="0.85" HorizontalAlignment="Center" />
+            <TextBlock Text="Profil wechseln" FontSize="30" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,10,0,0" />
+            <TextBlock Text="{Binding HotkeyHint}" FontSize="13" Opacity="0.6" HorizontalAlignment="Center" Margin="0,6,0,28" />
+
+            <ItemsControl ItemsSource="{Binding Cards}" Focusable="False" HorizontalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel HorizontalAlignment="Center" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border x:Name="Card" Width="280" Height="196" Margin="10" CornerRadius="12" Padding="18,16"
+                                Background="#F01E1F26" BorderBrush="#26FFFFFF" BorderThickness="1" Cursor="Hand"
+                                MouseLeftButtonUp="OnCardClick" MouseEnter="OnCardHover" RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="1" ScaleY="1" />
+                            </Border.RenderTransform>
+                            <DockPanel>
+                                <!-- Kopfzeile: Nummer (Schnellwahl) und Markierung des aktiven Profils -->
+                                <DockPanel DockPanel.Dock="Top">
+                                    <Border DockPanel.Dock="Left" Width="26" Height="26" CornerRadius="13" Background="#1FFFFFFF"
+                                            Visibility="{Binding HasNumber, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="{Binding Number}" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <Border DockPanel.Dock="Right" CornerRadius="9" Background="#333DA5F4" Padding="9,2" VerticalAlignment="Center"
+                                            Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="AKTIV" FontSize="11" FontWeight="SemiBold" Foreground="#8FD0FF" />
+                                    </Border>
+                                    <Border />
+                                </DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="{Binding Name}" FontSize="20" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,12,0,0" />
+                                <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" FontSize="12" Opacity="0.6" Margin="0,2,0,0" />
+
+                                <!-- Vorschau: je Leiste ein schmaler Streifen mit den Widget-Symbolen -->
+                                <StackPanel VerticalAlignment="Bottom">
+                                    <ItemsControl ItemsSource="{Binding Bars}" Focusable="False">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Height="22" CornerRadius="5" Background="#14FFFFFF" BorderBrush="#14FFFFFF" BorderThickness="1" Margin="0,4,0,0" Padding="8,0">
+                                                    <ItemsControl ItemsSource="{Binding}" Focusable="False" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <StackPanel Orientation="Horizontal" />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Grid Width="13" Height="13" Margin="5,0" Opacity="0.75" ToolTip="{Binding Name}">
+                                                                    <TextBlock x:Name="Glyph" Text="{Binding Glyph}" FontFamily="{StaticResource WidgetIconFont}" FontSize="12"
+                                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                    <Viewbox>
+                                                                        <Canvas Width="24" Height="24">
+                                                                            <Path Data="{Binding PathData}" Stroke="{Binding Foreground, ElementName=Glyph}" StrokeThickness="2"
+                                                                                  StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                                                        </Canvas>
+                                                                    </Viewbox>
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Text="{Binding MoreBars}" FontSize="11" Opacity="0.5" Margin="2,4,0,0"
+                                               Visibility="{Binding HasMoreBars, Converter={StaticResource BoolToVisibility}}" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="#3DA5F4" />
+                                <Setter TargetName="Card" Property="BorderThickness" Value="2" />
+                                <Setter TargetName="Card" Property="Background" Value="#F0262833" />
+                                <Setter TargetName="Card" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="1.04" ScaleY="1.04" />
+                                    </Setter.Value>
+                                </Setter>
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Button Content="Profile verwalten …" HorizontalAlignment="Center" Margin="0,26,0,0" Padding="16,7"
+                    Click="OnManageClick" Focusable="False" Cursor="Hand" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -169,6 +169,17 @@ public partial class TopBarWindow : Window
         return false;
     }
 
+    /// <summary>True, wenn <paramref name="other"/> in der Z-Reihenfolge über der Leiste liegt (z. B. ein Topmost-Spiel).</summary>
+    public bool IsBelow(IntPtr other)
+    {
+        if (Handle == IntPtr.Zero || other == IntPtr.Zero) return false;
+        for (IntPtr hwnd = NativeMethods.GetWindow(Handle, GW_HWNDPREV); hwnd != IntPtr.Zero; hwnd = NativeMethods.GetWindow(hwnd, GW_HWNDPREV))
+        {
+            if (hwnd == other) return true;
+        }
+        return false;
+    }
+
     /// <summary>Setzt die Z-Ebene laut <see cref="Layer"/> (dynamischer Modus).</summary>
     public void ApplyLayer()
     {
@@ -188,6 +199,55 @@ public partial class TopBarWindow : Window
     private IntPtr _menuHandle;
     private IntPtr _foregroundBeforeMenu;
 
+    private static readonly object DynamicMenuMarker = new();
+
+    /// <summary>
+    /// Beim Öffnen eingefügt: „Widget sperren“ für das Widget unter dem Mauszeiger und die Profile als eigener
+    /// Abschnitt (aktives mit Häkchen, dazu die Profilauswahl als Overlay).
+    /// </summary>
+    private void OnContextMenuOpening(object sender, System.Windows.Controls.ContextMenuEventArgs e)
+    {
+        if (DataContext is not TopBarViewModel vm || ProfileSeparator.Parent is not System.Windows.Controls.ContextMenu menu) return;
+
+        foreach (var old in menu.Items.OfType<FrameworkElement>().Where(i => i.DataContext == DynamicMenuMarker).ToList())
+            menu.Items.Remove(old);
+
+        if (WidgetPanel.MovableWidgetIdAt(System.Windows.Input.Mouse.GetPosition(WidgetPanel)) is { } widgetId &&
+            vm.DescribeWidget(widgetId) is { } widget)
+        {
+            menu.Items.Insert(menu.Items.IndexOf(LockMenuItem) + 1, new System.Windows.Controls.MenuItem
+            {
+                Header = widget.Locked ? $"„{widget.Name}“ entsperren" : $"„{widget.Name}“ sperren",
+                Tag = widget.Locked ? "" : "",
+                Command = vm.ToggleWidgetLockCommand,
+                CommandParameter = widgetId,
+                DataContext = DynamicMenuMarker,
+            });
+        }
+
+        int index = menu.Items.IndexOf(ProfileSeparator) + 1;
+        var items = new List<FrameworkElement>();
+        foreach (var (id, name, isActive) in vm.ProfileEntries)
+        {
+            items.Add(new System.Windows.Controls.MenuItem
+            {
+                Header = name,
+                Tag = isActive ? "" : "", // Häkchen
+                FontWeight = isActive ? FontWeights.SemiBold : FontWeights.Normal,
+                Command = vm.SwitchProfileCommand,
+                CommandParameter = id,
+            });
+        }
+        items.Add(new System.Windows.Controls.MenuItem { Header = vm.ProfilePickerText, Tag = "", Command = vm.ShowProfilesCommand });
+        items.Add(new System.Windows.Controls.Separator());
+
+        foreach (var item in items)
+        {
+            item.DataContext = DynamicMenuMarker; // Kennung zum Entfernen beim nächsten Öffnen
+            menu.Items.Insert(index++, item);
+        }
+    }
+
     /// <summary>
     /// Die Leiste wird nie aktiviert (WS_EX_NOACTIVATE). Ohne aktives Fenster sieht das Menü Klicks in andere
     /// Fenster nicht und bliebe offen. Deshalb holt es sich beim Öffnen den Vordergrund: Dann schließt jeder
@@ -199,7 +259,21 @@ public partial class TopBarWindow : Window
         _menuHandle = source.Handle;
         _foregroundBeforeMenu = GetForegroundWindow();
         KeepMenuAboveBar();
+        // Ist schon ein eigenes Fenster aktiv (z. B. die Einstellungen), sieht das Menü Klicks außerhalb ohnehin.
+        // Ein Aktivierungswechsel innerhalb der eigenen Anwendung würde es dagegen sofort wieder schließen.
+        if (IsOwnWindow(_foregroundBeforeMenu))
+        {
+            _foregroundBeforeMenu = IntPtr.Zero;
+            return;
+        }
         SetForegroundWindow(_menuHandle);
+    }
+
+    private static bool IsOwnWindow(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return false;
+        GetWindowThreadProcessId(hwnd, out uint pid);
+        return pid == (uint)Environment.ProcessId;
     }
 
     private bool _raisingMenu;
@@ -294,7 +368,9 @@ public partial class TopBarWindow : Window
         }
 
         // Ziehbare Widgets verschiebt das Layout-Panel selbst; überall sonst (oder mit Strg) wird das Fenster verschoben.
-        if (BarLayoutPanel.IsWindowMoveModifier || !WidgetPanel.IsDraggableWidgetAt(e.GetPosition(WidgetPanel)))
+        // Ein einzeln gesperrtes Widget bleibt stehen – auch die Fläche wird dann nicht mitgezogen.
+        var point = e.GetPosition(WidgetPanel);
+        if (BarLayoutPanel.IsWindowMoveModifier || !(WidgetPanel.IsDraggableWidgetAt(point) || WidgetPanel.IsLockedWidgetAt(point)))
             _movePressPoint = e.GetPosition(this);
     }
 
@@ -424,7 +500,7 @@ public partial class TopBarWindow : Window
 
                 case WM_WINDOWPOSCHANGED:
                     AppBar?.NotifyWindowPosChanged();
-                    KeepMenuAboveBar(); // Leiste nach oben geholt → offenes Menü bleibt darüber
+                    KeepMenuAboveBar(); // Fläche nach oben geholt → offenes Menü bleibt darüber
                     break;
 
                 case WM_WINDOWPOSCHANGING when IsDynamic && Layer == Veyra.Configuration.WindowLayer.Desktop:

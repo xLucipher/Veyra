@@ -1,0 +1,59 @@
+<w:FlyoutWindow x:Class="Veyra.Widgets.Metrics.FpsFlyout"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:w="clr-namespace:Veyra.Widgets"
+        Title="FPS"
+        ThemeMode="Dark"
+        Width="380"
+        Background="#2A2B32">
+    <Border Style="{StaticResource FlyoutFrame}">
+        <StackPanel>
+            <!-- Messung läuft -->
+            <StackPanel Visibility="{Binding MeasureVisibility}">
+                <TextBlock Text="FPS" Style="{StaticResource FlyoutTitle}" />
+                <TextBlock Text="{Binding Subtitle}" Style="{StaticResource FlyoutSubtitle}" />
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="{Binding FpsText}" FontSize="30" FontWeight="SemiBold" Typography.NumeralAlignment="Tabular" />
+                        <TextBlock Text="FPS" FontSize="12" Opacity="0.6" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="{Binding FrameTimeText}" FontSize="18" FontWeight="SemiBold" Margin="0,10,0,0" Typography.NumeralAlignment="Tabular" />
+                        <TextBlock Text="Frametime" FontSize="12" Opacity="0.6" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="{Binding LowText}" FontSize="18" FontWeight="SemiBold" Margin="0,10,0,0" Typography.NumeralAlignment="Tabular" />
+                        <TextBlock Text="1 % Low (10 s)" FontSize="12" Opacity="0.6" />
+                    </StackPanel>
+                </Grid>
+                <Border Background="#14FFFFFF" CornerRadius="6" Padding="10" Margin="0,14,0,0">
+                    <Canvas Width="320" Height="60" ClipToBounds="True">
+                        <Polyline Points="{Binding Graph}" Stroke="{Binding AccentBrush}" StrokeThickness="1.5" StrokeLineJoin="Round" />
+                    </Canvas>
+                </Border>
+                <TextBlock Text="{Binding SummaryText}" FontSize="12" Opacity="0.6" Margin="0,6,0,0" />
+                <TextBlock Text="Gemessen wird das Programm im Vordergrund (DirectX 9 bis 12). Vulkan- und OpenGL-Spiele nur, wenn der Grafiktreiber ihre Ausgabe über DirectX leitet."
+                           FontSize="11.5" Opacity="0.5" TextWrapping="Wrap" Margin="0,10,0,0" />
+            </StackPanel>
+
+            <!-- Berechtigung fehlt -->
+            <StackPanel Visibility="{Binding PermissionVisibility}">
+                <TextBlock Text="{Binding PermissionTitle}" Style="{StaticResource FlyoutTitle}" />
+                <TextBlock Text="{Binding PermissionText}" Style="{StaticResource FlyoutSubtitle}" Margin="0,6,0,0" />
+                <Button Command="{Binding GrantCommand}" Visibility="{Binding GrantButtonVisibility}" HorizontalAlignment="Left" Margin="0,12,0,0"
+                        Style="{DynamicResource AccentButtonStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE72E;" Style="{StaticResource FlyoutGlyph}" FontSize="13" Margin="0,0,8,0" />
+                        <TextBlock Text="FPS-Messung erlauben" />
+                    </StackPanel>
+                </Button>
+                <TextBlock Text="{Binding GrantStatus}" Style="{StaticResource FlyoutSubtitle}" Margin="0,8,0,0" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</w:FlyoutWindow>

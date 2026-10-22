@@ -9,6 +9,7 @@ public partial class TimerFlyout : FlyoutWindow
     public TimerFlyout()
     {
         InitializeComponent();
+        IsDraggable = true; // wie der Kalender mit der Maus verschiebbar
         // Enter übernimmt Name bzw. Dauer sofort (sonst erst beim Verlassen des Feldes).
         PreviewKeyDown += (_, e) =>
         {

@@ -97,9 +97,11 @@ public sealed class AudioApp : ObservableObject
 }
 
 /// <summary>
-/// Lautstärke je App (Audio-Sitzungen des Standardgeräts, wie im Windows-Lautstärkemixer). Wird nur erzeugt,
-/// solange das Lautstärke-Popup offen ist. Ereignisbasiert: neue Sitzungen meldet IAudioSessionNotification,
+/// Lautstärke je App (Audio-Sitzungen des Standard-Wiedergabegeräts, wie im Windows-Lautstärkemixer). Wird nur
+/// erzeugt, solange das Lautstärke-Popup offen ist. Ereignisbasiert: neue Sitzungen meldet IAudioSessionNotification,
 /// Lautstärke- und Statusänderungen je Sitzung IAudioSessionEvents. Alle öffentlichen Mitglieder: UI-Thread.
+/// Nur für die Wiedergabe: Beim Mikrofon wirken Pegel und Stummschaltung je Aufnahme-Sitzung in der Praxis auf das
+/// ganze Gerät, deshalb gibt es dort keine Regler je App.
 /// </summary>
 public sealed class AudioSessionMixer : IDisposable
 {
@@ -113,9 +115,8 @@ public sealed class AudioSessionMixer : IDisposable
     private SessionCreatedSink? _createdSink;
     private bool _disposed;
 
-    public AudioSessionMixer(AudioFlow flow)
+    public AudioSessionMixer()
     {
-        Flow = flow;
         try
         {
             Open();
@@ -125,8 +126,6 @@ public sealed class AudioSessionMixer : IDisposable
             Log.Error("Volume", "Audio-Sitzungen konnten nicht gelesen werden", ex);
         }
     }
-
-    public AudioFlow Flow { get; }
 
     /// <summary>Apps mit Audio-Sitzung, Systemklänge zuerst, dann alphabetisch.</summary>
     public ObservableCollection<AudioApp> Apps { get; } = [];
@@ -152,8 +151,7 @@ public sealed class AudioSessionMixer : IDisposable
     private void Open()
     {
         _enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
-        var dataFlow = Flow == AudioFlow.Output ? EDataFlow.Render : EDataFlow.Capture;
-        if (_enumerator.GetDefaultAudioEndpoint(dataFlow, ERole.Console, out _device) != 0 || _device is null) return;
+        if (_enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out _device) != 0 || _device is null) return;
 
         var iid = IID_IAudioSessionManager2;
         if (_device.Activate(ref iid, CLSCTX_ALL, IntPtr.Zero, out var instance) != 0 || instance is not IAudioSessionManager2 manager) return;

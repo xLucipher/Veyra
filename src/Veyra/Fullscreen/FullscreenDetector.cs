@@ -18,7 +18,11 @@ public enum FullscreenKind
     Exclusive,
 }
 
-public readonly record struct FullscreenState(FullscreenKind Kind, IntPtr Window, string Reason)
+/// <param name="Squeezed">
+/// Randloses Vollbildfenster, das Windows wegen unseres reservierten Bildschirmbereichs nach unten geschoben bzw.
+/// verkleinert hat (deckt den Monitor deshalb nicht mehr ganz ab).
+/// </param>
+public readonly record struct FullscreenState(FullscreenKind Kind, IntPtr Window, string Reason, bool Squeezed = false)
 {
     public static FullscreenState NotFullscreen(string reason) => new(FullscreenKind.None, IntPtr.Zero, reason);
 }
@@ -42,6 +46,9 @@ public readonly record struct FullscreenState(FullscreenKind Kind, IntPtr Window
 ///     – sein Client-Bereich den Monitor vollständig überdeckt.
 ///     Maximierte Fenster mit Größenrahmen sind nie Vollbild (Ausnahme: Client deckt Monitor ab, Fenster ist im
 ///     Vordergrund und die Shell meldet QUNS_BUSY – z. B. Browser-Vollbild bei manchen Browsern).
+///  4. Reserviert die Leiste Bildschirmbereich, gilt auch ein rahmenloses Vordergrundfenster als Vollbild, das Windows
+///     unter den reservierten Bereich geschoben hat (volle Breite, bis zum Arbeitsbereich unten) – siehe
+///     <see cref="FullscreenState.Squeezed"/>.
 ///
 /// Wechsel in den Vollbildzustand werden sofort gemeldet, das Verlassen erst, wenn es
 /// <see cref="BehaviorSettings.FullscreenShowDelayMs"/> lang stabil ist (verhindert Flackern bei Alt+Tab und Ladebildschirmen).
@@ -98,6 +105,9 @@ public sealed class FullscreenDetector : IDisposable
     /// <summary>Fenster der eigenen Leiste (wird ignoriert).</summary>
     public IntPtr OwnWindow { get; set; }
 
+    /// <summary>Von der eigenen Leiste reservierter Bildschirmbereich (null = keine Reservierung).</summary>
+    public RECT? ReservedArea { get; set; }
+
     public FullscreenState State => _state;
 
     public event EventHandler<FullscreenState>? StateChanged;
@@ -106,6 +116,9 @@ public sealed class FullscreenDetector : IDisposable
 
     /// <summary>Die Z-Reihenfolge der Hauptfenster hat sich geändert (z. B. Taskleiste hat sich nach vorne geholt).</summary>
     public event EventHandler? ZOrderChanged;
+
+    /// <summary>Nach jeder Auswertung (auch ohne Zustandswechsel), z. B. um eine aufgeschobene Reservierung nachzuholen.</summary>
+    public event EventHandler? Evaluated;
 
     public void Configure(BehaviorSettings behavior)
     {
@@ -197,6 +210,8 @@ public sealed class FullscreenDetector : IDisposable
             // Verlassen erst nach Bestätigung melden (Entprellung).
             _confirmLeaveTimer.Start();
         }
+
+        Evaluated?.Invoke(this, EventArgs.Empty);
     }
 
     private void Report(FullscreenState state)
@@ -268,6 +283,9 @@ public sealed class FullscreenDetector : IDisposable
                 return new FullscreenState(FullscreenKind.Borderless, hwnd,
                     process is not null && _forcedProcesses.Contains(process) ? $"erzwungen '{process}'" : "Fenster deckt Monitor ab");
 
+            if (hwnd == foreground && ReservedArea is { } reserved && IsSqueezedFullscreen(hwnd, rect, monitor, reserved))
+                return new FullscreenState(FullscreenKind.Borderless, hwnd, "von der Reservierung verdrängt", Squeezed: true);
+
             if (topmost) continue; // z. B. Bild-im-Bild über einem Spiel
             return FullscreenState.NotFullscreen("oberstes Fenster ist kein Vollbild");
         }
@@ -296,6 +314,22 @@ public sealed class FullscreenDetector : IDisposable
 
         // Mit Titelleiste nur dann, wenn der Client-Bereich den Monitor trotzdem vollständig füllt.
         return WindowInspector.TryGetClientScreenRect(hwnd, out var client) && client.Covers(monitorRect, tolerance: 1);
+    }
+
+    /// <summary>
+    /// Randloses Vollbildfenster, das Windows beim Verkleinern des Arbeitsbereichs (unsere Reservierung) unter die
+    /// Leiste geschoben bzw. auf den Arbeitsbereich verkleinert hat: ohne Rahmen, volle Breite, reicht bis zum
+    /// unteren Rand des Arbeitsbereichs und beginnt höchstens knapp unterhalb des reservierten Bereichs.
+    /// </summary>
+    private static bool IsSqueezedFullscreen(IntPtr hwnd, RECT rect, MonitorInfo monitor, RECT reserved)
+    {
+        long style = WindowInspector.GetStyle(hwnd);
+        if ((style & WS_CAPTION) == WS_CAPTION || (style & WS_THICKFRAME) != 0) return false;
+
+        var bounds = monitor.Bounds;
+        return rect.Left <= bounds.Left && rect.Right >= bounds.Right &&
+               rect.Top > bounds.Top && rect.Top <= reserved.Bottom + reserved.Height &&
+               rect.Bottom >= monitor.WorkArea.Bottom;
     }
 
     private static bool IsOnMonitor(IntPtr hwnd, MonitorInfo monitor)

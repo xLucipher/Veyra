@@ -138,6 +138,7 @@ public sealed class TimerWidget : ObservableObject, IBarWidget, IHotkeyTarget
 
     private Brush _foreground = Brushes.White;
     private Brush _iconBrush = Brushes.White;
+    private Brush _nameBrush = Brushes.White;
     private Brush _accentBrush = Brushes.White;
     private Brush _trackBrush = Brushes.Transparent;
     private FontFamily _fontFamily = new("Segoe UI");
@@ -167,6 +168,9 @@ public sealed class TimerWidget : ObservableObject, IBarWidget, IHotkeyTarget
 
     public Brush Foreground { get => _foreground; private set => SetProperty(ref _foreground, value); }
     public Brush IconBrush { get => _iconBrush; private set => SetProperty(ref _iconBrush, value); }
+
+    /// <summary>Timername auf der Leiste: Schriftfarbe der Leiste, nicht die Wertfarbe der Restzeit.</summary>
+    public Brush NameBrush { get => _nameBrush; private set => SetProperty(ref _nameBrush, value); }
     public Brush AccentBrush { get => _accentBrush; private set => SetProperty(ref _accentBrush, value); }
     public Brush TrackBrush { get => _trackBrush; private set => SetProperty(ref _trackBrush, value); }
     public FontFamily FontFamily { get => _fontFamily; private set => SetProperty(ref _fontFamily, value); }
@@ -184,8 +188,10 @@ public sealed class TimerWidget : ObservableObject, IBarWidget, IHotkeyTarget
         var barForeground = ColorUtil.ToBrush(bar.Appearance.ForegroundColor, Colors.White);
         Foreground = entry?.LabelColor is { } label ? ColorUtil.ToBrush(label, Colors.White) : barForeground;
         IconBrush = entry?.IconColor is { } icon ? ColorUtil.ToBrush(icon, Colors.White) : barForeground;
+        NameBrush = barForeground;
         AccentBrush = ColorUtil.ToBrush(entry?.IndicatorColor ?? WidgetEntry.DefaultIndicatorColor, Colors.DeepSkyBlue);
-        TrackBrush = Units.Freeze(new SolidColorBrush(((SolidColorBrush)Foreground).Color) { Opacity = 0.14 });
+        // Hintergrundspur aus der Leistenfarbe, nicht aus der Wertfarbe – sonst färbt sie sich mit.
+        TrackBrush = Units.Freeze(new SolidColorBrush(((SolidColorBrush)barForeground).Color) { Opacity = 0.14 });
         FontFamily = new FontFamily(bar.Appearance.FontFamily);
 
         SyncItems();
